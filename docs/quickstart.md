@@ -19,6 +19,15 @@ This repository ships the visionOS build MCP server. Follow these steps to finis
 
 ## Installation
 
+is your DevToolsSecurity status is disabled, run `sudo DevToolsSecurity -enable` command.
+
+```
+$ DevToolsSecurity -status
+Developer mode is currently disabled.
+
+$ sudo DevToolsSecurity -enable
+```
+
 ### 1. Clone this repository
 
 ```bash

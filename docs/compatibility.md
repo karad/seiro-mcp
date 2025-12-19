@@ -60,11 +60,11 @@ This repository treats the MCP surface as a contract:
    - Confirmed by adding to `~/.codex/config.toml` (use absolute paths; no env expansion):
      ```toml
      [mcp_servers.visionos]
-     command = "/Users/<your-username>/study/mcp/seiro-mcp/target/release/seiro-mcp"
+     command = "/<this-repo-path>/target/release/seiro-mcp"
      args = ["--transport=stdio"]
-     env.MCP_CONFIG_PATH = "/Users/<your-username>/study/mcp/seiro-mcp/config.toml"
+     env.MCP_CONFIG_PATH = "/<this-repo-path>/config.toml"
      env.MCP_SHARED_TOKEN = "<token>"
-     working_directory = "/Users/<your-username>/study/mcp/seiro-mcp"
+     working_directory = "/<this-repo-path>"
      ```
    - After restarting Codex CLI, `mcp list` shows the visionOS tools. Build the release binary first.
    - For TCP, set `args = ["--transport=tcp"]` and align `server.host` / `server.port`.
