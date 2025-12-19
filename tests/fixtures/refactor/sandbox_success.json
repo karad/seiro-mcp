@@ -1,0 +1,30 @@
+{
+  "checks": [
+    {
+      "details": "<details>",
+      "name": "allowed_path",
+      "result": "pass"
+    },
+    {
+      "details": "<details>",
+      "name": "sdk",
+      "result": "pass"
+    },
+    {
+      "details": "<details>",
+      "name": "devtools_security",
+      "result": "pass"
+    },
+    {
+      "details": "<details>",
+      "name": "xcode_license",
+      "result": "pass"
+    },
+    {
+      "details": "<details>",
+      "name": "disk_space",
+      "result": "pass"
+    }
+  ],
+  "status": "ok"
+}

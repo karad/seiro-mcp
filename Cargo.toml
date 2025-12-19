@@ -1,0 +1,37 @@
+[package]
+name = "seiro-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/karad/seiro-mcp"
+homepage = "https://github.com/karad/seiro-mcp"
+documentation = "https://karad.github.io/seiro-mcp/"
+keywords = ["mcp", "model-context-protocol", "rmcp", "visionos", "xcodebuild"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace]
+members = ["xtask"]
+resolver = "2"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+config = "0.14"
+rmcp = { version = "0.8.5", features = ["transport-io", "client"] }
+schemars = { version = "1.1", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.38", features = ["rt-multi-thread", "macros", "io-util", "process", "net"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
+tokio-util = { version = "0.7", features = ["io"] }
+sha2 = "0.10"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+libc = "0.2"

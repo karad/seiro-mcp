@@ -1,0 +1,2 @@
+// !dummy Xcode project file for integration tests
+// The visionOS build tool only checks the existence of this file path during tests.

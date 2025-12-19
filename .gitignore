@@ -1,0 +1,54 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+
+# Tooling
+.DS_Store
+.idea/
+.vscode/
+
+# SpecKit outputs
+coverage/
+dist/
+
+# VisionOS test artifacts
+tests/fixtures/visionos/workspace/VisionApp/target/
+
+# Added by cargo
+
+/target
+
+*.code-workspace
+
+# exclude
+config.toml
+.codex/
+.rustup-home/
+.specify/
+specs/
+AGENTS.md
+
+.env
+.env.*
+
+.direnv/
+.envrc
+.tool-versions
+.mise.toml
+
+*.swp
+*.swo
+*.tmp
+*~
+
+*.log
+
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+DerivedData/
+.swiftpm/
+*.xcuserstate
+xcuserdata/

@@ -1,0 +1,17 @@
+[server]
+host = "127.0.0.1"
+port = 8787
+
+[auth]
+token = "valid-token-123456"
+
+[visionos]
+allowed_paths = ["/Users/example/codex/workspaces"]
+# intentionally omit allowed_schemes
+default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
+required_sdks = ["visionOS", "visionOS Simulator"]
+xcode_path = "/Applications/Xcode.app/Contents/Developer"
+xcodebuild_path = "/usr/bin/xcodebuild"
+max_build_minutes = 20
+artifact_ttl_secs = 600
+cleanup_schedule_secs = 60

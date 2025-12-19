@@ -1,0 +1,13 @@
+theme: jekyll-theme-minimal
+title: Seiro MCP Docs
+description: Seiro MCP server and visionOS tools
+header_pages:
+  - index.md
+  - quickstart.md
+  - glossary.md
+  - config.md
+  - runbook.md
+  - telemetry.md
+  - compatibility.md
+  - release.md
+

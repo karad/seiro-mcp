@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          components: rustfmt, clippy
+      - name: Preflight
+        run: cargo run -p xtask -- preflight
+      - name: Docs checks
+        run: |
+          cargo run -p xtask -- langscan
+          cargo run -p xtask -- docs-langscan
+          cargo run -p xtask -- check-docs-links
+

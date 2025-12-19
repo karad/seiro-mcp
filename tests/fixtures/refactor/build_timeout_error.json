@@ -1,0 +1,12 @@
+{
+  "code": -32602,
+  "data": {
+    "code": "timeout",
+    "details": "<details>",
+    "job_id": "<job_id>",
+    "remediation": "Shorten the build time or increase max_build_minutes.",
+    "retryable": true,
+    "sandbox_state": "no_violation"
+  },
+  "message": "<message>"
+}

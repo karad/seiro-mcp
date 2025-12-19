@@ -1,0 +1,8 @@
+{
+  "artifact_zip": "<artifact_zip>",
+  "download_ttl_seconds": 0,
+  "job_id": "<job_id>",
+  "log_excerpt": "<log_excerpt>",
+  "sha256": "<artifact_sha256>",
+  "status": "succeeded"
+}

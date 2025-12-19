@@ -1,0 +1,8 @@
+{
+  "artifact_path": "<artifact_path>",
+  "artifact_sha256": "<artifact_sha256>",
+  "duration_ms": 0,
+  "job_id": "<job_id>",
+  "log_excerpt": "<log_excerpt>",
+  "status": "succeeded"
+}

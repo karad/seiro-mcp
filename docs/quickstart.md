@@ -1,36 +1,20 @@
-# Seiro MCP
+---
+layout: default
+title: Quickstart
+lang: en
+---
 
-[![CI](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://karad.github.io/seiro-mcp/)
+# Quickstart
 
-Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
-
-Detailed start/stop procedures live in [`docs/runbook.md`](docs/runbook.md).
-
-## Motivation
-
-At first, I tried to start autonomous AI-driven coding in my local Codex CLI environment on my Mac, but it didn’t work well in my setup. So I decided to build a simple build tool that provides only the functionality I really needed, and started developing it myself. As I worked on it, I gained deeper insights into autonomous coding and realized new possibilities for this tool. Going forward, I would like to develop various supporting features required for building spatial computing applications as an MCP server.
+This repository ships the visionOS build MCP server. Follow these steps to finish `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo build --release` within ~30 minutes on a fresh machine and call the three tools (`validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output`) from an MCP client.
 
 ## Prerequisites
 
-- Rust 1.91.1 (recommend `rustup override set 1.91.1`)
-- Cargo (the `cargo` command must be available)
-- Codex CLI
-- Any MCP client (e.g., official MCP CLI / Inspector)
-- `git`, `bash`/`zsh`
-
-## Directory layout
-
-```text
-src/
-  lib/            # shared logic: errors, telemetry, filesystem helpers
-  server/         # config + RMCP runtime
-  tools/          # visionOS tools
-tests/
-  integration/    # integration tests (separate crate)
-docs/             # configuration, runbook, review checklists
-```
+- macOS 15 Sequoia or later
+- Xcode 16+ with visionOS / visionOS Simulator SDK
+- Rust 1.91.1 (`rustup override set 1.91.1`)
+- `cargo`, `git`, `bash`/`zsh`
+- An MCP client (Codex CLI or official Inspector)
 
 
 ## Installation
@@ -195,48 +179,26 @@ mcp call fetch_build_output '{
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
 
-## Running (stdio / tcp)
+## Startup modes and auth tips
 
-- The server must be launched as a child process by an MCP client; running `cargo run` directly will fail with `MCP_CLIENT_REQUIRED` (exit 44).
-- See [`docs/runbook.md`](docs/runbook.md) for the full stdio/tcp recipes.
-
-## Modes and authentication
-
-- `--transport` / `MCP_CONFIG_PATH` / `--config`: default transport is `stdio`. With `--transport=tcp`, the server listens on `server.host` / `server.port` from config. `--config` wins; otherwise `MCP_CONFIG_PATH` → `./config.toml` (relative paths are resolved to absolute).
-- `--token` / `MCP_SHARED_TOKEN`: provide a 16–128 character secret that matches `[auth].token`; the CLI flag takes precedence over the environment variable. Mismatch or missing values fail at startup and print structured errors to stderr.
-- Exit codes:
-  - 42: `AUTH_TOKEN_MISMATCH` (does not match `[auth].token`)
-  - 43: `MCP_TOKEN_REQUIRED` (token missing)
-  - 44: `MCP_CLIENT_REQUIRED` (stdin/stdout is a TTY; must be launched via MCP client)
-- See the Runbook section “Shutdown procedure and exit codes” for details.
-
-## Tests and quality gates
-
-- Preferred: `cargo run -p xtask -- preflight` (runs fetch/check/test/fmt/clippy/build in order).
-- Manual: `cargo fetch` → `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`.
-- Unit tests in `src/server/config/mod.rs` cover configuration validation (success and error cases).
-- `tests/integration/visionos_build.rs` covers `validate_sandbox_policy`, `build_visionos_app`, and `fetch_build_output`, including TTL behavior.
-
+- Switch transports with `--transport {stdio|tcp}` (default `stdio`).
+- `--token` wins over `MCP_SHARED_TOKEN`; if neither is set, startup fails with `MCP_TOKEN_REQUIRED` (exit 43).
+- Mismatched `[auth].token` yields `AUTH_TOKEN_MISMATCH` (exit 42); TTY stdin/stdout yields `MCP_CLIENT_REQUIRED` (exit 44).
+- See [`docs/runbook.md`](./runbook.md) for detailed procedures and troubleshooting.
 
 ## Troubleshooting
 
-- **Config file not found**: place `config.toml` at repo root or set an absolute `MCP_CONFIG_PATH`.
-- **Invalid port**: `server.port` must be 1024–65535; fix before starting via MCP client.
-- **Token missing**: startup is blocked if `auth.token` is empty; set a random 16+ character string.
-- **`AUTH_TOKEN_MISMATCH` / `MCP_TOKEN_REQUIRED`**: ensure `MCP_SHARED_TOKEN` or `--token` matches `[auth].token` and is 16–128 characters.
-- **`MCP_CLIENT_REQUIRED`**: occurs when running `cargo run` directly; always launch via an MCP client (Inspector / Codex, etc.).
-- **`path_not_allowed`**: add the project parent to `visionos.allowed_paths` and restart.
-- **`scheme_not_allowed`**: add the scheme to `visionos.allowed_schemes` and restart.
+| Symptom | Resolution |
+| --- | --- |
+| `CONFIG_MISSING_FIELD auth` | `[auth].token` is missing. Set a 16+ character value. |
+| `path_not_allowed` | Add the project’s parent directory to `visionos.allowed_paths`, then restart the server. |
+| `sdk_missing` | Install visionOS / Simulator SDK from Xcode > Settings > Platforms. |
+| `scheme_not_allowed` | Add the scheme to `visionos.allowed_schemes` and restart the server. |
+| `timeout` | Increase `max_build_minutes` or reduce project size/clean build. |
+| `artifact_expired` | Call `fetch_build_output` sooner or raise `artifact_ttl_secs`. |
 
-## References
+## Logs and telemetry
 
-- visionOS quickstart: [`docs/quickstart.md`](docs/quickstart.md)
-- runbook: [`docs/runbook.md`](docs/runbook.md)
-- Configuration details: [`docs/config.md`](docs/config.md)
+- `RUST_LOG=debug` enables verbose `tracing`.
+- visionOS jobs use the `rmcp_sample::visionos` target and record `job_id`, `status`, and `elapsed_ms` (see [`docs/telemetry.md`](./telemetry.md)).
 
-## Open source
-
-- License: [`LICENSE`](LICENSE)
-- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Code of Conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
-- Security: [`SECURITY.md`](SECURITY.md)
