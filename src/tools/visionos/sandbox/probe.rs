@@ -4,6 +4,29 @@ use crate::lib::errors::SandboxPolicyError;
 
 use super::MIN_DISK_BYTES;
 
+fn parse_showsdks_output(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .filter_map(parse_sdk_from_showsdks_line)
+        .collect()
+}
+
+fn parse_sdk_from_showsdks_line(line: &str) -> Option<String> {
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    for (idx, token) in tokens.iter().enumerate() {
+        if *token == "-sdk" {
+            return tokens.get(idx + 1).map(|sdk| (*sdk).to_string());
+        }
+        if let Some(sdk) = token.strip_prefix("-sdk") {
+            let sdk = sdk.trim();
+            if !sdk.is_empty() {
+                return Some(sdk.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Abstraction for environment access during sandbox validation.
 pub trait SandboxProbe {
     fn requires_developer_dir(&self) -> bool {
@@ -39,15 +62,7 @@ impl SandboxProbe for SystemSandboxProbe {
             });
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout
-            .lines()
-            .filter_map(|line| {
-                line.split_whitespace()
-                    .find(|token| token.starts_with("-sdk"))
-                    .map(|token| token.trim_start_matches("-sdk").trim().to_string())
-            })
-            .filter(|entry| !entry.is_empty())
-            .collect())
+        Ok(parse_showsdks_output(&stdout))
     }
 
     fn devtools_security_enabled(&self) -> Result<bool, SandboxPolicyError> {
@@ -178,5 +193,35 @@ impl SandboxProbe for EnvSandboxProbe {
         }
 
         Ok(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_sdk_from_showsdks_line, parse_showsdks_output};
+
+    #[test]
+    fn parse_sdk_from_showsdks_line_extracts_sdk_from_two_token_form() {
+        let line = "    visionOS 26.0                   -sdk xros26.0";
+        assert_eq!(
+            parse_sdk_from_showsdks_line(line),
+            Some("xros26.0".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_showsdks_output_collects_multiple_sdks() {
+        let stdout = r#"
+iOS SDKs:
+    iOS 18.0                       -sdk iphoneos18.0
+
+visionOS SDKs:
+    visionOS 26.0                   -sdk xros26.0
+    Simulator - visionOS 26.0       -sdk xrsimulator26.0
+"#;
+        let sdks = parse_showsdks_output(stdout);
+        assert!(sdks.contains(&"iphoneos18.0".to_string()));
+        assert!(sdks.contains(&"xros26.0".to_string()));
+        assert!(sdks.contains(&"xrsimulator26.0".to_string()));
     }
 }
