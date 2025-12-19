@@ -15,8 +15,8 @@ This site hosts the minimal Rust MCP server (rmcp v0.8.5) and the visionOS build
 - Telemetry and logs: [docs/telemetry.md](telemetry.md)
 - Compatibility and client setup: [docs/compatibility.md](compatibility.md)
 - Releases: [docs/release.md](release.md)
-- Repository README: [../README.md](../README.md)
-- Open source docs: [LICENSE](../LICENSE) / [CONTRIBUTING.md](../CONTRIBUTING.md) / [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) / [SECURITY.md](../SECURITY.md)
+- Repository README: [../README.md](https://github.com/karad/seiro-mcp/blob/main/README.md)
+- Open source docs: [LICENSE](https://github.com/karad/seiro-mcp/blob/main/LICENSE) / [CONTRIBUTING.md](https://github.com/karad/seiro-mcp/blob/main/CONTRIBUTING.md) / [CODE_OF_CONDUCT.md](https://github.com/karad/seiro-mcp/blob/main/CODE_OF_CONDUCT.md) / [SECURITY.md](https://github.com/karad/seiro-mcp/blob/main/SECURITY.md)
 
 ## Support scope
 

@@ -42,7 +42,7 @@ cargo fetch
 
 ### 3. Prepare `config.toml`
 
-(see [`docs/config.md`](docs/config.md) for details)
+(see [`docs/config.md`](./config.md) for details)
 
 - Copy from `config.example.toml` as a starting point.
   ```toml
