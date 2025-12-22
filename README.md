@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://karad.github.io/seiro-mcp/)
 
+**This product is still experimental. Please use it with care.　No warranty is provided.**
+
 Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
 
 Detailed start/stop procedures live in [`docs/runbook.md`](docs/runbook.md).
@@ -131,7 +133,7 @@ If any step fails, fix and rerun.
 Add an entry like the following to Codex CLI config (`~/.codex/config.toml`) to call the visionOS tools:
 
 ```toml
-[mcp_servers.visionos_build]
+[mcp_servers.seiro_mcp]
 command = "/<this-repo-path>/target/release/seiro-mcp"
 args = ["--transport=stdio"]
 env.MCP_CONFIG_PATH = "/<this-repo-path>/config.toml"

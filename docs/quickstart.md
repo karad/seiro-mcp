@@ -115,7 +115,7 @@ If any step fails, fix and rerun.
 Add an entry like the following to Codex CLI config (`~/.codex/config.toml`) to call the visionOS tools:
 
 ```toml
-[mcp_servers.visionos_build]
+[mcp_servers.seiro_mcp]
 command = "/<this-repo-path>/target/release/seiro-mcp"
 args = ["--transport=stdio"]
 env.MCP_CONFIG_PATH = "/<this-repo-path>/config.toml"
