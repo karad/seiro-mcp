@@ -1,14 +1,40 @@
-use std::{ffi::CString, os::unix::ffi::OsStrExt, path::Path, path::PathBuf, process::Command};
+use std::{
+    collections::BTreeSet,
+    ffi::CString,
+    os::unix::ffi::OsStrExt,
+    path::Path,
+    path::PathBuf,
+    process::Command,
+};
 
 use crate::lib::errors::SandboxPolicyError;
 
 use super::MIN_DISK_BYTES;
 
 fn parse_showsdks_output(stdout: &str) -> Vec<String> {
-    stdout
-        .lines()
-        .filter_map(parse_sdk_from_showsdks_line)
-        .collect()
+    let mut result = BTreeSet::<String>::new();
+    for sdk in stdout.lines().filter_map(parse_sdk_from_showsdks_line) {
+        // Preserve the raw `xcodebuild -showsdks` SDK identifier (e.g. `xros26.0`,
+        // `xrsimulator26.0`) for debugging.
+        result.insert(sdk.clone());
+
+        // Also inject stable aliases so sandbox validation can use human-facing
+        // names that do not include version suffixes.
+        //
+        // Xcode uses `-sdk xros*` / `-sdk xrsimulator*` for visionOS / Simulator,
+        // while users commonly refer to these as "visionOS" and "visionOS Simulator"
+        // (and some tooling uses "xrOS").
+        let lower = sdk.to_lowercase();
+        if lower.starts_with("xros") || lower.starts_with("visionos") {
+            result.insert("visionOS".to_string());
+            result.insert("xrOS".to_string());
+        }
+        if lower.starts_with("xrsimulator") || lower.starts_with("visionossimulator") {
+            result.insert("visionOS Simulator".to_string());
+            result.insert("xrOS Simulator".to_string());
+        }
+    }
+    result.into_iter().collect()
 }
 
 fn parse_sdk_from_showsdks_line(line: &str) -> Option<String> {
@@ -223,5 +249,7 @@ visionOS SDKs:
         assert!(sdks.contains(&"iphoneos18.0".to_string()));
         assert!(sdks.contains(&"xros26.0".to_string()));
         assert!(sdks.contains(&"xrsimulator26.0".to_string()));
+        assert!(sdks.contains(&"visionOS".to_string()));
+        assert!(sdks.contains(&"visionOS Simulator".to_string()));
     }
 }

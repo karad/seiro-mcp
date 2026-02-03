@@ -158,7 +158,7 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
         &request.required_sdks
     };
     for sdk in required_sdks {
-        if !sdks.iter().any(|item| item == sdk) {
+        if !sdk_is_present(&sdks, sdk) {
             return Err(SandboxPolicyError::MissingSdk { name: sdk.clone() });
         }
     }
@@ -240,6 +240,22 @@ fn normalize_project_path(path: &Path) -> Result<PathBuf, SandboxPolicyError> {
         });
     }
     Ok(path.to_path_buf())
+}
+
+fn sdk_is_present(sdks: &[String], required: &str) -> bool {
+    let required = required.trim();
+    if required.is_empty() {
+        return false;
+    }
+    let required_lower = required.to_lowercase();
+    sdks.iter().any(|sdk| {
+        let sdk_trimmed = sdk.trim();
+        if sdk_trimmed.is_empty() {
+            return false;
+        }
+        let sdk_lower = sdk_trimmed.to_lowercase();
+        sdk_lower == required_lower || sdk_lower.starts_with(&required_lower)
+    })
 }
 
 #[cfg(test)]
@@ -331,6 +347,28 @@ mod tests {
             }
             other => panic!("Unexpected error: {other:?}", other = other),
         }
+    }
+
+    #[tokio::test]
+    async fn sandbox_policy_accepts_prefix_sdk_match() {
+        let temp = tempdir().expect("can create temp directory");
+        let request = SandboxPolicyRequest {
+            project_path: allowed_project_path(),
+            required_sdks: vec!["xros".into(), "macosx".into()],
+            xcode_path: Some(temp.path().to_path_buf()),
+        };
+        let probe = FakeProbe {
+            sdks: vec!["xros26.0".into(), "macosx15.0".into()],
+            devtools_enabled: true,
+            license_ok: true,
+            disk_bytes: MIN_DISK_BYTES + 1,
+        };
+
+        let response = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
+            .await
+            .expect("prefix match should be accepted");
+
+        assert_eq!(response.status, SandboxStatus::Ok);
     }
 
     #[tokio::test]
