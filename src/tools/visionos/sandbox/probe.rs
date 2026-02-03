@@ -1,9 +1,5 @@
 use std::{
-    collections::BTreeSet,
-    ffi::CString,
-    os::unix::ffi::OsStrExt,
-    path::Path,
-    path::PathBuf,
+    collections::BTreeSet, ffi::CString, os::unix::ffi::OsStrExt, path::Path, path::PathBuf,
     process::Command,
 };
 
