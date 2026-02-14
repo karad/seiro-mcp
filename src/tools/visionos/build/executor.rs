@@ -1,6 +1,6 @@
 use std::{
     env, fs,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -16,7 +16,6 @@ use crate::{
         fs as artifact_fs, visionos as visionos_helpers, xcodebuild as xcodebuild_helpers,
     },
     server::config::VisionOsConfig,
-    tools::visionos::artifacts::ARTIFACT_ROOT,
 };
 
 use super::{BuildRequestValidationError, VisionOsBuildRequest};
@@ -73,8 +72,9 @@ pub async fn run_build(
     request: &VisionOsBuildRequest,
     config: &VisionOsConfig,
     job_id: Uuid,
+    artifact_root: PathBuf,
 ) -> Result<BuildVisionOsAppResponse, VisionOsBuildError> {
-    let job_dir = artifact_fs::ensure_job_dir(Path::new(ARTIFACT_ROOT), &job_id)?;
+    let job_dir = artifact_fs::ensure_job_dir(&artifact_root, &job_id)?;
     let staging_dir = job_dir.join("staging");
     fs::create_dir_all(&staging_dir).map_err(|err| VisionOsBuildError::ArtifactFailure {
         message: format!("Failed to create artifact staging directory: {err}"),

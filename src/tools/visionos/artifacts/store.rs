@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs::{self, OpenOptions},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use chrono::{DateTime, Duration, Utc};
 use tokio::sync::Mutex;
@@ -9,6 +14,7 @@ use crate::lib::errors::ArtifactError;
 use crate::lib::fs as artifact_fs;
 
 pub const ARTIFACT_ROOT: &str = "target/visionos-builds";
+const ARTIFACT_FALLBACK_ROOT: &str = "seiro-mcp/visionos-builds";
 
 /// Build job status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,11 +57,8 @@ struct ArtifactStoreState {
 impl VisionOsArtifactStore {
     /// Build a store using the default artifact directory.
     pub fn new(ttl_secs: u32, cleanup_schedule_secs: u32) -> Self {
-        Self::with_root(
-            PathBuf::from(ARTIFACT_ROOT),
-            ttl_secs,
-            cleanup_schedule_secs,
-        )
+        let root = resolve_artifact_root();
+        Self::with_root(root, ttl_secs, cleanup_schedule_secs)
     }
 
     /// Build a store with a custom root directory (useful for tests).
@@ -71,6 +74,11 @@ impl VisionOsArtifactStore {
                 }),
             }),
         }
+    }
+
+    /// Return the artifact root directory currently used by this store.
+    pub fn root_dir(&self) -> PathBuf {
+        self.inner.root.clone()
     }
 
     /// Record a successful job.
@@ -187,5 +195,103 @@ impl VisionOsArtifactStore {
         state
             .jobs
             .retain(|_, record| now - record.finished_at <= metadata_window);
+    }
+}
+
+fn resolve_artifact_root() -> PathBuf {
+    let preferred = PathBuf::from(ARTIFACT_ROOT);
+    let fallback = std::env::temp_dir().join(ARTIFACT_FALLBACK_ROOT);
+    resolve_artifact_root_with(&preferred, &fallback)
+}
+
+fn resolve_artifact_root_with(preferred: &Path, fallback: &Path) -> PathBuf {
+    if directory_writable(preferred) {
+        return preferred.to_path_buf();
+    }
+
+    if directory_writable(fallback) {
+        warn!(
+            target: "rmcp_sample::visionos",
+            preferred_root = %preferred.display(),
+            fallback_root = %fallback.display(),
+            "Artifact root is not writable; using temporary directory fallback"
+        );
+        return fallback.to_path_buf();
+    }
+
+    warn!(
+        target: "rmcp_sample::visionos",
+        preferred_root = %preferred.display(),
+        fallback_root = %fallback.display(),
+        "Artifact root and fallback are not writable; keeping preferred root"
+    );
+    preferred.to_path_buf()
+}
+
+fn directory_writable(path: &Path) -> bool {
+    if fs::create_dir_all(path).is_err() {
+        return false;
+    }
+
+    let probe = path.join(format!(
+        ".seiro-mcp-write-probe-{}-{}",
+        std::process::id(),
+        Uuid::new_v4()
+    ));
+    match OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn resolve_prefers_target_when_writable() {
+        let temp = tempdir().expect("temporary directory");
+        let preferred = temp.path().join("target/visionos-builds");
+        let fallback = temp.path().join("tmp-fallback");
+
+        let selected = resolve_artifact_root_with(&preferred, &fallback);
+        assert_eq!(selected, preferred);
+    }
+
+    #[test]
+    fn resolve_uses_fallback_when_target_is_not_writable() {
+        let temp = tempdir().expect("temporary directory");
+        let blocker = temp.path().join("target");
+        fs::write(&blocker, b"file-blocker").expect("write blocker file");
+        let preferred = blocker.join("visionos-builds");
+        let fallback = temp.path().join("tmp-fallback");
+
+        let selected = resolve_artifact_root_with(&preferred, &fallback);
+        assert_eq!(selected, fallback);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_uses_fallback_when_target_directory_is_read_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempdir().expect("temporary directory");
+        let preferred = temp.path().join("target/visionos-builds");
+        fs::create_dir_all(&preferred).expect("create preferred dir");
+        let fallback = temp.path().join("tmp-fallback");
+
+        let mut permissions = fs::metadata(&preferred).expect("metadata").permissions();
+        permissions.set_mode(0o555);
+        fs::set_permissions(&preferred, permissions).expect("set read-only permissions");
+
+        let selected = resolve_artifact_root_with(&preferred, &fallback);
+        assert_eq!(selected, fallback);
     }
 }

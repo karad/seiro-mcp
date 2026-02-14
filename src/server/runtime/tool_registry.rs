@@ -90,7 +90,13 @@ impl VisionOsServer {
 
         let job_id = Uuid::new_v4();
         let _ticket = self.visionos_queue.wait_for_turn(job_id).await;
-        let result = visionos::run_build(&request, &self.config.visionos, job_id).await;
+        let result = visionos::run_build(
+            &request,
+            &self.config.visionos,
+            job_id,
+            self.artifact_store.root_dir(),
+        )
+        .await;
         self.visionos_queue.finish_job(job_id).await;
 
         match result {
