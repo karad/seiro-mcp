@@ -187,6 +187,28 @@ mcp call fetch_build_output '{
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
+## Skill-assisted flow (explicit invocation only)
+
+You can run the same build flow with the bundled skill:
+
+- Skill file: `skills/visionos-build-operator/SKILL.md`
+- Activation policy: explicit invocation only (no auto-suggestion, no auto-apply in v1)
+
+When to choose which mode:
+- MCP-only: best for direct scripting and explicit tool calls.
+- Skill-assisted: best when you want a standardized operational sequence and error handling guidance.
+
+How to invoke explicitly:
+- `Use visionos-build-operator for this task.`
+- `Run this via the visionos-build-operator skill.`
+
+The skill still executes the same MCP tools in order:
+1. `validate_sandbox_policy`
+2. `build_visionos_app`
+3. `fetch_build_output`
+
+Contracts and payload schemas stay unchanged.
+
 
 ## Startup modes and auth tips
 
@@ -210,4 +232,3 @@ mcp call fetch_build_output '{
 
 - `RUST_LOG=debug` enables verbose `tracing`.
 - visionOS jobs use the `rmcp_sample::visionos` target and record `job_id`, `status`, and `elapsed_ms` (see [`docs/telemetry.md`](./telemetry.md)).
-

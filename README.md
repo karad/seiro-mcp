@@ -205,6 +205,24 @@ mcp call fetch_build_output '{
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
+## Skills Support (Explicit Invocation)
+
+Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
+
+- MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output` directly.
+- Skill-assisted mode: explicitly request the `visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
+
+Skill path in this repository:
+- `skills/visionos-build-operator/SKILL.md`
+
+Explicit invocation examples:
+- `Use visionos-build-operator for this visionOS build task.`
+- `Please run this using the visionos-build-operator skill.`
+
+Important:
+- Skills provide orchestration guidance.
+- MCP provides execution capability.
+- Even in skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
 
 ## Running (stdio / tcp)
 
