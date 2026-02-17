@@ -183,7 +183,7 @@ mcp call build_visionos_app '{
     "project_path": "/Users/<user>/codex/workspaces/VisionApp/VisionApp.xcodeproj",
     "scheme": "VisionApp",
     "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
-    "configuration": "Debug",
+    "configuration": "debug",
     "extra_args": ["-quiet"],
     "env_overrides": {"MOCK_XCODEBUILD_BEHAVIOR": "success"}
 }'
