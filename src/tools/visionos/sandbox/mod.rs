@@ -255,7 +255,12 @@ async fn validate_sandbox_policy_with_probe_mode<P: SandboxProbe>(
     probe: &P,
     probe_mode: &str,
 ) -> Result<SandboxPolicyResponse, SandboxValidationFailure> {
-    let project_path = normalize_project_path(&request.project_path)?;
+    let project_path = normalize_project_path(&request.project_path).map_err(|error| {
+        SandboxValidationFailure {
+            error,
+            diagnostics: None,
+        }
+    })?;
     if !config.allowed_paths.is_empty()
         && !visionos_helpers::is_allowed_path(&project_path, &config.allowed_paths)
     {
@@ -420,13 +425,10 @@ pub fn sandbox_error_to_error_data(failure: SandboxValidationFailure) -> ErrorDa
         .expect("descriptor is valid")
 }
 
-fn normalize_project_path(path: &Path) -> Result<PathBuf, SandboxValidationFailure> {
+fn normalize_project_path(path: &Path) -> Result<PathBuf, SandboxPolicyError> {
     if !crate::lib::paths::is_nonempty_absolute(path) {
-        return Err(SandboxValidationFailure {
-            error: SandboxPolicyError::PathNotAllowed {
-                path: path.to_path_buf(),
-            },
-            diagnostics: None,
+        return Err(SandboxPolicyError::PathNotAllowed {
+            path: path.to_path_buf(),
         });
     }
     Ok(path.to_path_buf())
