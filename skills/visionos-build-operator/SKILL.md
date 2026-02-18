@@ -36,6 +36,10 @@ Collect and confirm these inputs before running the flow:
 1. Validate environment and policy first:
    - Call `validate_sandbox_policy` with target project path and required SDKs.
    - If validation fails, stop and return remediation.
+   - If diagnostics are needed, inspect `details.diagnostics` (`probe_mode`, `effective_required_sdks`, `detected_sdks_raw`, `detected_sdks_normalized`).
+
+Optional preflight:
+- Before build, you MAY call `inspect_xcode_sdks` (read-only) to compare SDK detection context with `validate_sandbox_policy`.
 
 2. Run build:
    - Call `build_visionos_app` with confirmed inputs.
@@ -51,7 +55,7 @@ Collect and confirm these inputs before running the flow:
 | --- | --- | --- |
 | `path_not_allowed` | validate/build | Ask user to add project parent path to `visionos.allowed_paths`, restart server, rerun from step 1 |
 | `scheme_not_allowed` | build | Ask user to add scheme to `visionos.allowed_schemes`, restart server, rerun from step 2 |
-| `sdk_missing` | validate | Ask user to install visionOS SDK in Xcode, then rerun from step 1 |
+| `sdk_missing` | validate | First inspect `details.diagnostics`; if needed call `inspect_xcode_sdks`; then ask user to install/fix visionOS SDK settings and rerun from step 1 |
 | `devtools_security_disabled` | validate | Ask user to run `DevToolsSecurity -enable`, then rerun from step 1 |
 | `xcode_unlicensed` | validate | Ask user to accept license (`sudo xcodebuild -license`), then rerun from step 1 |
 | `disk_insufficient` | validate | Ask user to free disk space and rerun from step 1 |
