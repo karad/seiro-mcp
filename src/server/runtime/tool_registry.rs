@@ -15,8 +15,8 @@ use crate::{
         self,
         visionos::{
             self, BuildVisionOsAppResponse, FetchBuildOutputRequest, FetchBuildOutputResponse,
-            SandboxPolicyRequest, SandboxPolicyResponse, VisionOsArtifactStore,
-            VisionOsBuildRequest, VisionOsJobQueue,
+            InspectXcodeSdksRequest, InspectXcodeSdksResponse, SandboxPolicyRequest,
+            SandboxPolicyResponse, VisionOsArtifactStore, VisionOsBuildRequest, VisionOsJobQueue,
         },
         ServerToolRouter,
     },
@@ -134,7 +134,21 @@ impl VisionOsServer {
     ) -> Result<Json<SandboxPolicyResponse>, ErrorData> {
         match visionos::validate_sandbox_policy(request, &self.config.visionos).await {
             Ok(response) => Ok(Json(response)),
-            Err(err) => Err(visionos::sandbox_error_to_error_data(err)),
+            Err(failure) => Err(visionos::sandbox_error_to_error_data(failure)),
+        }
+    }
+
+    #[tool(
+        name = "inspect_xcode_sdks",
+        description = "Inspect Xcode SDK detection context using sandbox probe settings"
+    )]
+    async fn inspect_xcode_sdks(
+        &self,
+        Parameters(request): Parameters<InspectXcodeSdksRequest>,
+    ) -> Result<Json<InspectXcodeSdksResponse>, ErrorData> {
+        match visionos::inspect_xcode_sdks(request, &self.config.visionos).await {
+            Ok(response) => Ok(Json(response)),
+            Err(failure) => Err(visionos::sandbox_error_to_error_data(failure)),
         }
     }
 

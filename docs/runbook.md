@@ -8,7 +8,7 @@ lang: en
 
 ## Purpose and scope
 
-- Steps to start/stop `seiro-mcp` from Codex CLI / Inspector and exercise the visionOS tools (`validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output`) within ~30 minutes.
+- Steps to start/stop `seiro-mcp` from Codex CLI / Inspector and exercise the visionOS tools (`validate_sandbox_policy` / `inspect_xcode_sdks` / `build_visionos_app` / `fetch_build_output`) within ~30 minutes.
 - Target OS: macOS 15 / Linux 6.9+. visionOS builds require Xcode 16 + visionOS SDK.
 - Assumes Rust 1.91.1, `cargo`, `bash`/`zsh`.
 
@@ -107,6 +107,7 @@ working_directory = "/Users/<user>/sources/repos/seiro-mcp"
 | `AUTH_TOKEN_MISMATCH` (42) | Align `MCP_SHARED_TOKEN` or `--token` with `[auth].token`; spaces or short values fail. |
 | `MCP_TOKEN_REQUIRED` (43) | Token missing. Provide a 16–128 char ASCII/UTF-8 value. |
 | `MCP_CLIENT_REQUIRED` (44) | You ran `cargo run` directly. Launch via Inspector / Codex as a child process. |
+| `sdk_missing` | Check `details.diagnostics` from `validate_sandbox_policy`, optionally run `inspect_xcode_sdks`, then install/fix SDK settings and retry. |
 | `artifact_expired` | Call `fetch_build_output` within TTL; raise `visionos.artifact_ttl_secs` if needed and document the retrieval flow. |
 | TCP connect fail (`EADDRINUSE`) | Resolve port conflicts on `server.port` and retry. |
 
@@ -117,5 +118,5 @@ working_directory = "/Users/<user>/sources/repos/seiro-mcp"
 ## Manual verification
 1. Run the build chain above (Clippy after TODO is resolved).
 2. In Inspector stdio mode, confirm `mcp list` shows the visionOS tools.
-3. Restart Codex CLI and confirm `mcp describe operational` shows all four tools.
-4. In the visionOS mock flow, run `validate_sandbox_policy` → `build_visionos_app` → `fetch_build_output` (optionally set `MOCK_XCODEBUILD_BEHAVIOR`).
+3. Restart Codex CLI and confirm `mcp describe operational` shows the visionOS tools, including `inspect_xcode_sdks`.
+4. In the visionOS mock flow, run `validate_sandbox_policy` → `inspect_xcode_sdks` (optional) → `build_visionos_app` → `fetch_build_output` (optionally set `MOCK_XCODEBUILD_BEHAVIOR`).

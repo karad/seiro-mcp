@@ -7,30 +7,47 @@ use crate::lib::errors::SandboxPolicyError;
 
 use super::MIN_DISK_BYTES;
 
-fn parse_showsdks_output(stdout: &str) -> Vec<String> {
-    let mut result = BTreeSet::<String>::new();
-    for sdk in stdout.lines().filter_map(parse_sdk_from_showsdks_line) {
-        // Preserve the raw `xcodebuild -showsdks` SDK identifier (e.g. `xros26.0`,
-        // `xrsimulator26.0`) for debugging.
-        result.insert(sdk.clone());
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SdkInventory {
+    pub raw: Vec<String>,
+    pub normalized: Vec<String>,
+    pub invocation: Option<String>,
+    pub notes: Vec<String>,
+}
 
-        // Also inject stable aliases so sandbox validation can use human-facing
-        // names that do not include version suffixes.
-        //
-        // Xcode uses `-sdk xros*` / `-sdk xrsimulator*` for visionOS / Simulator,
-        // while users commonly refer to these as "visionOS" and "visionOS Simulator"
-        // (and some tooling uses "xrOS").
-        let lower = sdk.to_lowercase();
+fn normalize_sdks(raw_sdks: &[String]) -> Vec<String> {
+    let mut normalized = BTreeSet::<String>::new();
+    for sdk in raw_sdks {
+        let trimmed = sdk.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        normalized.insert(trimmed.to_string());
+        let lower = trimmed.to_lowercase();
         if lower.starts_with("xros") || lower.starts_with("visionos") {
-            result.insert("visionOS".to_string());
-            result.insert("xrOS".to_string());
+            normalized.insert("visionOS".to_string());
+            normalized.insert("xrOS".to_string());
         }
         if lower.starts_with("xrsimulator") || lower.starts_with("visionossimulator") {
-            result.insert("visionOS Simulator".to_string());
-            result.insert("xrOS Simulator".to_string());
+            normalized.insert("visionOS Simulator".to_string());
+            normalized.insert("xrOS Simulator".to_string());
         }
     }
-    result.into_iter().collect()
+    normalized.into_iter().collect()
+}
+
+fn parse_showsdks_output(stdout: &str, invocation: Option<String>) -> SdkInventory {
+    let mut raw = BTreeSet::<String>::new();
+    for sdk in stdout.lines().filter_map(parse_sdk_from_showsdks_line) {
+        raw.insert(sdk);
+    }
+    let raw: Vec<String> = raw.into_iter().collect();
+    SdkInventory {
+        normalized: normalize_sdks(&raw),
+        raw,
+        invocation,
+        notes: Vec::new(),
+    }
 }
 
 fn parse_sdk_from_showsdks_line(line: &str) -> Option<String> {
@@ -54,7 +71,7 @@ pub trait SandboxProbe {
     fn requires_developer_dir(&self) -> bool {
         true
     }
-    fn list_sdks(&self, developer_dir: &Path) -> Result<Vec<String>, SandboxPolicyError>;
+    fn list_sdks(&self, developer_dir: &Path) -> Result<SdkInventory, SandboxPolicyError>;
     fn devtools_security_enabled(&self) -> Result<bool, SandboxPolicyError>;
     fn xcode_license_accepted(&self) -> Result<bool, SandboxPolicyError>;
     fn disk_free_bytes(&self, path: &Path) -> Result<u64, SandboxPolicyError>;
@@ -64,12 +81,20 @@ pub trait SandboxProbe {
 pub struct SystemSandboxProbe;
 
 impl SandboxProbe for SystemSandboxProbe {
-    fn list_sdks(&self, developer_dir: &Path) -> Result<Vec<String>, SandboxPolicyError> {
+    fn list_sdks(&self, developer_dir: &Path) -> Result<SdkInventory, SandboxPolicyError> {
         let mut command = Command::new("xcodebuild");
         command.arg("-showsdks");
         if !developer_dir.as_os_str().is_empty() {
             command.env("DEVELOPER_DIR", developer_dir);
         }
+        let invocation = if developer_dir.as_os_str().is_empty() {
+            "xcodebuild -showsdks".to_string()
+        } else {
+            format!(
+                "DEVELOPER_DIR={} xcodebuild -showsdks",
+                developer_dir.display()
+            )
+        };
         let output = command
             .output()
             .map_err(|err| SandboxPolicyError::Internal {
@@ -84,7 +109,7 @@ impl SandboxProbe for SystemSandboxProbe {
             });
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(parse_showsdks_output(&stdout))
+        Ok(parse_showsdks_output(&stdout, Some(invocation)))
     }
 
     fn devtools_security_enabled(&self) -> Result<bool, SandboxPolicyError> {
@@ -167,9 +192,9 @@ impl SandboxProbe for EnvSandboxProbe {
         false
     }
 
-    fn list_sdks(&self, _developer_dir: &Path) -> Result<Vec<String>, SandboxPolicyError> {
+    fn list_sdks(&self, _developer_dir: &Path) -> Result<SdkInventory, SandboxPolicyError> {
         let sdks = std::env::var("VISIONOS_SANDBOX_SDKS").unwrap_or_default();
-        Ok(sdks
+        let raw: Vec<String> = sdks
             .split(',')
             .filter_map(|entry| {
                 let trimmed = entry.trim();
@@ -179,7 +204,19 @@ impl SandboxProbe for EnvSandboxProbe {
                     Some(trimmed.to_string())
                 }
             })
-            .collect())
+            .collect();
+        let mut notes = Vec::new();
+        if raw.is_empty() {
+            notes.push(
+                "VISIONOS_SANDBOX_SDKS is empty; env probe does not execute xcodebuild".into(),
+            );
+        }
+        Ok(SdkInventory {
+            normalized: normalize_sdks(&raw),
+            raw,
+            invocation: None,
+            notes,
+        })
     }
 
     fn devtools_security_enabled(&self) -> Result<bool, SandboxPolicyError> {
@@ -241,11 +278,17 @@ visionOS SDKs:
     visionOS 26.0                   -sdk xros26.0
     Simulator - visionOS 26.0       -sdk xrsimulator26.0
 "#;
-        let sdks = parse_showsdks_output(stdout);
-        assert!(sdks.contains(&"iphoneos18.0".to_string()));
-        assert!(sdks.contains(&"xros26.0".to_string()));
-        assert!(sdks.contains(&"xrsimulator26.0".to_string()));
-        assert!(sdks.contains(&"visionOS".to_string()));
-        assert!(sdks.contains(&"visionOS Simulator".to_string()));
+        let inventory = parse_showsdks_output(stdout, Some("xcodebuild -showsdks".into()));
+        assert!(inventory.raw.contains(&"iphoneos18.0".to_string()));
+        assert!(inventory.raw.contains(&"xros26.0".to_string()));
+        assert!(inventory.raw.contains(&"xrsimulator26.0".to_string()));
+        assert!(inventory.normalized.contains(&"visionOS".to_string()));
+        assert!(inventory
+            .normalized
+            .contains(&"visionOS Simulator".to_string()));
+        assert_eq!(
+            inventory.invocation.as_deref(),
+            Some("xcodebuild -showsdks")
+        );
     }
 }

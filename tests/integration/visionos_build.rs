@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf, time::Duration};
+use std::{env, path::PathBuf, sync::Mutex, time::Duration};
 
 use anyhow::Result;
 use rmcp::{
@@ -15,6 +15,8 @@ use seiro_mcp::server::{
     config::{AuthSection, ServerConfig, ServerSection, VisionOsConfig},
     runtime::VisionOsServer,
 };
+
+static SANDBOX_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[tokio::test]
 async fn build_tool_returns_artifact_metadata() -> Result<()> {
@@ -363,6 +365,9 @@ async fn fetch_tool_rejects_unknown_job() -> Result<()> {
 
 #[tokio::test]
 async fn sandbox_tool_reports_checks() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
     enable_fast_timeout();
     configure_sandbox_probe_env();
     let config = test_server_config(20);
@@ -407,11 +412,340 @@ async fn sandbox_tool_reports_checks() -> Result<()> {
             .unwrap_or(false),
         "checks must not be empty"
     );
+    let diagnostics = payload
+        .get("diagnostics")
+        .and_then(|v| v.as_object())
+        .expect("diagnostics should exist");
+    assert_eq!(
+        diagnostics.get("probe_mode").and_then(Value::as_str),
+        Some("env")
+    );
+    assert_eq!(
+        diagnostics
+            .get("effective_required_sdks")
+            .and_then(Value::as_array)
+            .map(|v| v.len()),
+        Some(2)
+    );
+    assert!(
+        diagnostics
+            .get("detected_sdks_normalized")
+            .and_then(Value::as_array)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false),
+        "detected_sdks_normalized should not be empty"
+    );
+    configure_sandbox_probe_env();
+    Ok(())
+}
+
+#[tokio::test]
+async fn sandbox_tool_returns_diagnostics_for_sdk_missing() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
+    enable_fast_timeout();
+    configure_sandbox_probe_env_with_sdks("");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "required_sdks": ["visionOS"],
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "validate_sandbox_policy".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("expected sdk_missing error");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "sdk_missing", "blocked", false);
+            let diagnostics = error_field(&inner, "details")
+                .and_then(Value::as_object)
+                .and_then(|details| details.get("diagnostics"))
+                .and_then(Value::as_object)
+                .expect("diagnostics should exist in sdk_missing details");
+            assert_eq!(
+                diagnostics.get("probe_mode").and_then(Value::as_str),
+                Some("env")
+            );
+            assert_eq!(
+                diagnostics
+                    .get("effective_required_sdks")
+                    .and_then(Value::as_array)
+                    .map(|v| v.len()),
+                Some(1)
+            );
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    configure_sandbox_probe_env();
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_tool_reports_sdk_inventory() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
+    enable_fast_timeout();
+    configure_sandbox_probe_env();
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "required_sdks": ["visionOS", "visionOS Simulator"],
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_sdks".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("inspect_xcode_sdks should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(response.get("status").and_then(|v| v.as_str()), Some("ok"));
+    assert_eq!(
+        response.get("probe_mode").and_then(|v| v.as_str()),
+        Some("env")
+    );
+    assert_eq!(
+        response
+            .get("missing_required_sdks")
+            .and_then(|v| v.as_array())
+            .map(|v| v.len()),
+        Some(0)
+    );
+    assert!(
+        response
+            .get("detected_sdks_normalized")
+            .and_then(|v| v.as_array())
+            .map(|v| !v.is_empty())
+            .unwrap_or(false),
+        "detected_sdks_normalized should not be empty"
+    );
+    configure_sandbox_probe_env();
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_tool_reports_missing_required_sdk_in_env_mode() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
+    enable_fast_timeout();
+    configure_sandbox_probe_env_with_sdks("");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "required_sdks": ["visionOS"],
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_sdks".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("inspect_xcode_sdks should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(
+        response.get("status").and_then(|v| v.as_str()),
+        Some("error")
+    );
+    assert_eq!(
+        response
+            .get("missing_required_sdks")
+            .and_then(|v| v.as_array())
+            .map(|v| v.len()),
+        Some(1)
+    );
+    configure_sandbox_probe_env();
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_tool_and_validate_share_required_sdk_view() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
+    enable_fast_timeout();
+    configure_sandbox_probe_env_with_sdks("visionOS");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let inspect_args = json!({
+        "required_sdks": ["visionOS", "visionOS Simulator"],
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let inspect_payload = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_sdks".into(),
+            arguments: Some(inspect_args),
+        })
+        .await
+        .expect("inspect_xcode_sdks should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+    let inspect_missing = inspect_payload
+        .get("missing_required_sdks")
+        .and_then(|v| v.as_array())
+        .map(|v| v.len())
+        .unwrap_or(0);
+
+    let validate_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "required_sdks": ["visionOS", "visionOS Simulator"],
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let validate_result = client
+        .call_tool(CallToolRequestParam {
+            name: "validate_sandbox_policy".into(),
+            arguments: Some(validate_args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(inspect_missing, 1);
+    let validate_error = validate_result.expect_err("validate should fail with missing sdk");
+    match validate_error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "sdk_missing", "blocked", false);
+            let diagnostics_required_len = error_field(&inner, "details")
+                .and_then(Value::as_object)
+                .and_then(|details| details.get("diagnostics"))
+                .and_then(Value::as_object)
+                .and_then(|diag| diag.get("effective_required_sdks"))
+                .and_then(Value::as_array)
+                .map(|v| v.len());
+            assert_eq!(diagnostics_required_len, Some(2));
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    configure_sandbox_probe_env();
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_tool_maps_invalid_xcode_path_error() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
+    enable_fast_timeout();
+    // Force system probe so xcode_path existence is checked.
+    env::set_var("VISIONOS_SANDBOX_PROBE", "system");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "required_sdks": ["visionOS"],
+        "xcode_path": "/tmp/does-not-exist"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_sdks".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("invalid xcode path should return an error");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "xcode_unlicensed", "blocked", false);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    configure_sandbox_probe_env();
     Ok(())
 }
 
 #[tokio::test]
 async fn sandbox_tool_rejects_disallowed_path() -> Result<()> {
+    let _guard = SANDBOX_ENV_LOCK
+        .lock()
+        .expect("sandbox env lock should not be poisoned");
     enable_fast_timeout();
     configure_sandbox_probe_env();
     let config = test_server_config(20);
@@ -450,6 +784,7 @@ async fn sandbox_tool_rejects_disallowed_path() -> Result<()> {
         }
         other => panic!("Unexpected error: {other:?}", other = other),
     }
+    configure_sandbox_probe_env();
     Ok(())
 }
 
@@ -530,6 +865,14 @@ fn enable_fast_timeout() {
 fn configure_sandbox_probe_env() {
     env::set_var("VISIONOS_SANDBOX_PROBE", "env");
     env::set_var("VISIONOS_SANDBOX_SDKS", "visionOS,visionOS Simulator");
+    env::set_var("VISIONOS_SANDBOX_DEVTOOLS", "enabled");
+    env::set_var("VISIONOS_SANDBOX_LICENSE", "accepted");
+    env::set_var("VISIONOS_SANDBOX_DISK_BYTES", "1099511627776");
+}
+
+fn configure_sandbox_probe_env_with_sdks(sdks: &str) {
+    env::set_var("VISIONOS_SANDBOX_PROBE", "env");
+    env::set_var("VISIONOS_SANDBOX_SDKS", sdks);
     env::set_var("VISIONOS_SANDBOX_DEVTOOLS", "enabled");
     env::set_var("VISIONOS_SANDBOX_LICENSE", "accepted");
     env::set_var("VISIONOS_SANDBOX_DISK_BYTES", "1099511627776");

@@ -1,4 +1,4 @@
-# Seiro MCP
+# ![Seiro MCP Logo](./docs/assets/seiro-mcp-logo.png)
 
 [![CI](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -171,10 +171,21 @@ mcp call validate_sandbox_policy '{
 - If `status: "ok"`, proceed to `build_visionos_app`.
 - If `status: "error"` or an MCP error, fix based on the code:
     - `path_not_allowed`: add the project parent directory to `visionos.allowed_paths`.
-    - `sdk_missing`: install visionOS SDK from Xcode > Settings > Platforms.
+    - `sdk_missing`: first inspect `details.diagnostics` (`probe_mode`, `effective_required_sdks`, `detected_sdks_raw`, `detected_sdks_normalized`), then install visionOS SDK from Xcode > Settings > Platforms.
     - `devtools_security_disabled`: run `DevToolsSecurity -enable`.
     - `xcode_unlicensed`: run `sudo xcodebuild -license`.
     - `disk_insufficient`: ensure 20GB+ free space for the build.
+
+Optional preflight before build:
+
+```bash
+mcp call inspect_xcode_sdks '{
+    "required_sdks": ["visionOS", "visionOS Simulator"],
+    "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+}'
+```
+- This read-only tool returns `missing_required_sdks` and the same SDK probe context used for sandbox validation.
+- Recommended troubleshooting order: `validate_sandbox_policy` diagnostics → `inspect_xcode_sdks` (optional) → retry validate/build.
 
 ### 3. Start a build with `build_visionos_app`
 
@@ -183,7 +194,7 @@ mcp call build_visionos_app '{
     "project_path": "/Users/<user>/codex/workspaces/VisionApp/VisionApp.xcodeproj",
     "scheme": "VisionApp",
     "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
-    "configuration": "Debug",
+    "configuration": "debug",
     "extra_args": ["-quiet"],
     "env_overrides": {"MOCK_XCODEBUILD_BEHAVIOR": "success"}
 }'
@@ -205,6 +216,36 @@ mcp call fetch_build_output '{
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
+## Skills Support (Explicit Invocation)
+
+Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
+
+- MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output` directly.
+- Skill-assisted mode: explicitly request the `visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
+
+Skill path in this repository:
+- `skills/visionos-build-operator/SKILL.md`
+
+Install for users in other projects:
+- Copy `skills/visionos-build-operator/` into the user's Codex home skill directory:
+  - `<user-specific CODEX_HOME>/.codex/skills/visionos-build-operator/`
+- If `CODEX_HOME` is not set, use the default:
+  - `~/.codex/skills/visionos-build-operator/`
+- Example:
+  ```bash
+  mkdir -p "$HOME/.codex/skills/visionos-build-operator"
+  cp -R /<path-to-seiro-mcp>/skills/visionos-build-operator/* \
+    "$HOME/.codex/skills/visionos-build-operator/"
+  ```
+
+Explicit invocation examples:
+- `Use visionos-build-operator for this visionOS build task.`
+- `Please run this using the visionos-build-operator skill.`
+
+Important:
+- Skills provide orchestration guidance.
+- MCP provides execution capability.
+- Even in skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
 
 ## Running (stdio / tcp)
 
@@ -238,6 +279,7 @@ mcp call fetch_build_output '{
 - **`MCP_CLIENT_REQUIRED`**: occurs when running `cargo run` directly; always launch via an MCP client (Inspector / Codex, etc.).
 - **`path_not_allowed`**: add the project parent to `visionos.allowed_paths` and restart.
 - **`scheme_not_allowed`**: add the scheme to `visionos.allowed_schemes` and restart.
+- **`sdk_missing`**: check `details.diagnostics` first; if `probe_mode` is `env`, verify `VISIONOS_SANDBOX_SDKS`. Then run `inspect_xcode_sdks` and retry after SDK/config fixes.
 
 ## References
 
