@@ -25,6 +25,6 @@ pub use errors::{
 };
 pub use registry::VisionOsToolRouter;
 pub use sandbox::{
-    sandbox_error_to_error_data, validate_sandbox_policy, SandboxPolicyRequest,
-    SandboxPolicyResponse,
+    inspect_xcode_sdks, sandbox_error_to_error_data, validate_sandbox_policy,
+    InspectXcodeSdksRequest, InspectXcodeSdksResponse, SandboxPolicyRequest, SandboxPolicyResponse,
 };

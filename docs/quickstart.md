@@ -153,10 +153,20 @@ mcp call validate_sandbox_policy '{
 - If `status: "ok"`, proceed to `build_visionos_app`.
 - If `status: "error"` or an MCP error, fix based on the code:
     - `path_not_allowed`: add the project parent directory to `visionos.allowed_paths`.
-    - `sdk_missing`: install visionOS SDK from Xcode > Settings > Platforms.
+    - `sdk_missing`: inspect `details.diagnostics` first (`probe_mode`, `effective_required_sdks`, `detected_sdks_*`), then install visionOS SDK from Xcode > Settings > Platforms.
     - `devtools_security_disabled`: run `DevToolsSecurity -enable`.
     - `xcode_unlicensed`: run `sudo xcodebuild -license`.
     - `disk_insufficient`: ensure 20GB+ free space for the build.
+
+Optional read-only SDK inspection:
+```bash
+mcp call inspect_xcode_sdks '{
+    "required_sdks": ["visionOS", "visionOS Simulator"],
+    "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+}'
+```
+- Use this when sandbox diagnostics and local shell results disagree.
+- Recommended troubleshooting order: `validate_sandbox_policy` diagnostics -> `inspect_xcode_sdks` -> retry validate/build.
 
 ### 3. Start a build with `build_visionos_app`
 
@@ -223,7 +233,7 @@ Contracts and payload schemas stay unchanged.
 | --- | --- |
 | `CONFIG_MISSING_FIELD auth` | `[auth].token` is missing. Set a 16+ character value. |
 | `path_not_allowed` | Add the project’s parent directory to `visionos.allowed_paths`, then restart the server. |
-| `sdk_missing` | Install visionOS / Simulator SDK from Xcode > Settings > Platforms. |
+| `sdk_missing` | Check `details.diagnostics`, run `inspect_xcode_sdks`, then install/fix SDK settings and retry. |
 | `scheme_not_allowed` | Add the scheme to `visionos.allowed_schemes` and restart the server. |
 | `timeout` | Increase `max_build_minutes` or reduce project size/clean build. |
 | `artifact_expired` | Call `fetch_build_output` sooner or raise `artifact_ttl_secs`. |

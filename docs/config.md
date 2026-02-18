@@ -88,6 +88,12 @@ This makes `build_visionos_app` and `validate_sandbox_policy` skip `path_not_all
   3. `devtools_security`: `DevToolsSecurity -status` reports enabled (`devtools_security_disabled`)
   4. `xcode_license`: `xcodebuild -checkFirstLaunchStatus` succeeds (`xcode_unlicensed`)
   5. `disk_space`: at least 20GB free on the project volume (`disk_insufficient`)
+- `validate_sandbox_policy` also returns `diagnostics` (additive, backward-compatible) to explain the evaluation context:
+  - `probe_mode`
+  - `effective_required_sdks`
+  - `detected_sdks_raw` / `detected_sdks_normalized`
+  - `effective_developer_dir`
+- `inspect_xcode_sdks` is a read-only helper tool that returns the same SDK detection view before running a build.
 
 ## Troubleshooting
 
@@ -98,7 +104,7 @@ This makes `build_visionos_app` and `validate_sandbox_policy` skip `path_not_all
 | `AUTH_TOKEN_MISMATCH` (exit 42) | Ensure `MCP_SHARED_TOKEN` or `--token` matches `[auth].token` (16–128 chars, no spaces). |
 | `MCP_TOKEN_REQUIRED` (exit 43) | Token is not set. Provide via env or `--token`. |
 | `path_not_allowed` | Add the project’s parent directory to `allowed_paths`. |
-| `sdk_missing` | Install visionOS / Simulator SDK from Xcode Platforms. |
+| `sdk_missing` | Inspect `details.diagnostics`, run `inspect_xcode_sdks`, then install/fix SDK settings. |
 | `devtools_security_disabled` | Run `DevToolsSecurity -enable` and retry. |
 | `xcode_unlicensed` | Run `sudo xcodebuild -license` and accept the license. |
 | `disk_insufficient` | Free 20GB+ on the same volume as the project. |

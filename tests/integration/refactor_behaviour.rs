@@ -155,6 +155,8 @@ fn normalize_sandbox_success(mut payload: Value) -> Value {
                 }
             }
         }
+        // Keep snapshot compatibility when additive diagnostics fields are introduced.
+        obj.remove("diagnostics");
     }
     payload
 }

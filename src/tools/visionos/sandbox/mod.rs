@@ -19,6 +19,7 @@ use crate::{
     server::config::VisionOsConfig,
 };
 
+use probe::SdkInventory;
 pub use probe::{EnvSandboxProbe, SandboxProbe, SystemSandboxProbe};
 
 const PATH_NOT_ALLOWED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
@@ -29,7 +30,7 @@ const PATH_NOT_ALLOWED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
 const SDK_MISSING_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "sdk_missing",
     "Required SDK not found",
-    "Add the visionOS SDK via Xcode > Settings > Platforms.",
+    "Inspect details.diagnostics (probe_mode, effective_required_sdks, detected_sdks_*), then add the visionOS SDK via Xcode > Settings > Platforms.",
 );
 const XCODE_UNLICENSED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "xcode_unlicensed",
@@ -93,27 +94,150 @@ pub struct SandboxCheck {
 }
 
 /// Response from `validate_sandbox_policy`.
+///
+/// Compatibility note:
+/// - Existing `status`/`checks` fields are kept stable.
+/// - Diagnostics-related fields must be additive so existing clients continue to
+///   parse responses without schema-breaking changes.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxPolicyResponse {
     pub status: SandboxStatus,
     pub checks: Vec<SandboxCheck>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<SandboxDiagnostics>,
+}
+
+/// Diagnostics data captured during sandbox validation.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct SandboxDiagnostics {
+    pub probe_mode: String,
+    pub effective_developer_dir: String,
+    pub effective_required_sdks: Vec<String>,
+    pub detected_sdks_raw: Vec<String>,
+    pub detected_sdks_normalized: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xcodebuild_invocation: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+/// Input for `inspect_xcode_sdks`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct InspectXcodeSdksRequest {
+    #[serde(default = "default_required_sdks")]
+    pub required_sdks: Vec<String>,
+    #[serde(default)]
+    pub xcode_path: Option<PathBuf>,
+}
+
+/// Response from `inspect_xcode_sdks`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct InspectXcodeSdksResponse {
+    pub status: SandboxStatus,
+    pub probe_mode: String,
+    pub developer_dir: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xcode_select_path: Option<String>,
+    pub required_sdks: Vec<String>,
+    pub detected_sdks_raw: Vec<String>,
+    pub detected_sdks_normalized: Vec<String>,
+    pub missing_required_sdks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+/// Structured failure for sandbox validation with optional diagnostics context.
+#[derive(Debug)]
+pub struct SandboxValidationFailure {
+    pub error: SandboxPolicyError,
+    pub diagnostics: Option<SandboxDiagnostics>,
 }
 
 /// Execute sandbox policy validation.
 pub async fn validate_sandbox_policy(
     request: SandboxPolicyRequest,
     config: &VisionOsConfig,
-) -> Result<SandboxPolicyResponse, SandboxPolicyError> {
+) -> Result<SandboxPolicyResponse, SandboxValidationFailure> {
     match env::var("VISIONOS_SANDBOX_PROBE").ok().as_deref() {
         Some("env") | Some("mock") => {
             let probe = EnvSandboxProbe;
-            validate_sandbox_policy_with_probe(request, config, &probe).await
+            validate_sandbox_policy_with_probe_mode(request, config, &probe, "env").await
         }
         _ => {
             let probe = SystemSandboxProbe;
-            validate_sandbox_policy_with_probe(request, config, &probe).await
+            validate_sandbox_policy_with_probe_mode(request, config, &probe, "system").await
         }
     }
+}
+
+/// Inspect SDK detection context using the same probe path as sandbox validation.
+pub async fn inspect_xcode_sdks(
+    request: InspectXcodeSdksRequest,
+    config: &VisionOsConfig,
+) -> Result<InspectXcodeSdksResponse, SandboxValidationFailure> {
+    match env::var("VISIONOS_SANDBOX_PROBE").ok().as_deref() {
+        Some("env") | Some("mock") => {
+            let probe = EnvSandboxProbe;
+            inspect_xcode_sdks_with_probe_mode(request, config, &probe, "env").await
+        }
+        _ => {
+            let probe = SystemSandboxProbe;
+            inspect_xcode_sdks_with_probe_mode(request, config, &probe, "system").await
+        }
+    }
+}
+
+async fn inspect_xcode_sdks_with_probe_mode<P: SandboxProbe>(
+    request: InspectXcodeSdksRequest,
+    config: &VisionOsConfig,
+    probe: &P,
+    probe_mode: &str,
+) -> Result<InspectXcodeSdksResponse, SandboxValidationFailure> {
+    let developer_dir = request
+        .xcode_path
+        .clone()
+        .unwrap_or_else(|| config.xcode_path.clone());
+    if probe.requires_developer_dir() && !developer_dir.exists() {
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::XcodePathUnavailable {
+                path: developer_dir,
+            },
+            diagnostics: None,
+        });
+    }
+    let required_sdks = if request.required_sdks.is_empty() {
+        config.required_sdks.clone()
+    } else {
+        request.required_sdks.clone()
+    };
+    let sdk_inventory =
+        probe
+            .list_sdks(&developer_dir)
+            .map_err(|error| SandboxValidationFailure {
+                error,
+                diagnostics: None,
+            })?;
+    let missing_required_sdks: Vec<String> = required_sdks
+        .iter()
+        .filter(|sdk| !sdk_is_present(&sdk_inventory.normalized, sdk))
+        .cloned()
+        .collect();
+    let status = if missing_required_sdks.is_empty() {
+        SandboxStatus::Ok
+    } else {
+        SandboxStatus::Error
+    };
+    Ok(InspectXcodeSdksResponse {
+        status,
+        probe_mode: probe_mode.to_string(),
+        developer_dir: developer_dir.display().to_string(),
+        xcode_select_path: None,
+        required_sdks,
+        detected_sdks_raw: sdk_inventory.raw,
+        detected_sdks_normalized: sdk_inventory.normalized,
+        missing_required_sdks,
+        notes: sdk_inventory.notes,
+    })
 }
 
 /// Version that allows injecting a test double.
@@ -121,12 +245,24 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
     request: SandboxPolicyRequest,
     config: &VisionOsConfig,
     probe: &P,
-) -> Result<SandboxPolicyResponse, SandboxPolicyError> {
+) -> Result<SandboxPolicyResponse, SandboxValidationFailure> {
+    validate_sandbox_policy_with_probe_mode(request, config, probe, "system").await
+}
+
+async fn validate_sandbox_policy_with_probe_mode<P: SandboxProbe>(
+    request: SandboxPolicyRequest,
+    config: &VisionOsConfig,
+    probe: &P,
+    probe_mode: &str,
+) -> Result<SandboxPolicyResponse, SandboxValidationFailure> {
     let project_path = normalize_project_path(&request.project_path)?;
     if !config.allowed_paths.is_empty()
         && !visionos_helpers::is_allowed_path(&project_path, &config.allowed_paths)
     {
-        return Err(SandboxPolicyError::PathNotAllowed { path: project_path });
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::PathNotAllowed { path: project_path },
+            diagnostics: None,
+        });
     }
 
     let mut checks = Vec::new();
@@ -146,30 +282,57 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
         .unwrap_or_else(|| config.xcode_path.clone());
 
     if probe.requires_developer_dir() && !developer_dir.exists() {
-        return Err(SandboxPolicyError::XcodePathUnavailable {
-            path: developer_dir,
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::XcodePathUnavailable {
+                path: developer_dir,
+            },
+            diagnostics: None,
         });
     }
 
-    let sdks = probe.list_sdks(&developer_dir)?;
+    let sdk_inventory =
+        probe
+            .list_sdks(&developer_dir)
+            .map_err(|error| SandboxValidationFailure {
+                error,
+                diagnostics: None,
+            })?;
     let required_sdks = if request.required_sdks.is_empty() {
-        &config.required_sdks
+        config.required_sdks.clone()
     } else {
-        &request.required_sdks
+        request.required_sdks.clone()
     };
-    for sdk in required_sdks {
-        if !sdk_is_present(&sdks, sdk) {
-            return Err(SandboxPolicyError::MissingSdk { name: sdk.clone() });
+    let diagnostics = build_diagnostics(
+        probe_mode,
+        developer_dir.clone(),
+        required_sdks.clone(),
+        &sdk_inventory,
+    );
+    for sdk in &required_sdks {
+        if !sdk_is_present(&sdk_inventory.normalized, sdk) {
+            return Err(SandboxValidationFailure {
+                error: SandboxPolicyError::MissingSdk { name: sdk.clone() },
+                diagnostics: Some(diagnostics),
+            });
         }
     }
     checks.push(SandboxCheck {
         name: "sdk".into(),
         result: SandboxCheckResult::Pass,
-        details: format!("SDK: {}", sdks.join(", ")),
+        details: format!("SDK: {}", sdk_inventory.normalized.join(", ")),
     });
 
-    if !probe.devtools_security_enabled()? {
-        return Err(SandboxPolicyError::DevToolsSecurityDisabled);
+    if !probe
+        .devtools_security_enabled()
+        .map_err(|error| SandboxValidationFailure {
+            error,
+            diagnostics: Some(diagnostics.clone()),
+        })?
+    {
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::DevToolsSecurityDisabled,
+            diagnostics: Some(diagnostics),
+        });
     }
     checks.push(SandboxCheck {
         name: "devtools_security".into(),
@@ -177,8 +340,17 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
         details: "DevToolsSecurity is enabled".into(),
     });
 
-    if !probe.xcode_license_accepted()? {
-        return Err(SandboxPolicyError::LicenseNotAccepted);
+    if !probe
+        .xcode_license_accepted()
+        .map_err(|error| SandboxValidationFailure {
+            error,
+            diagnostics: Some(diagnostics.clone()),
+        })?
+    {
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::LicenseNotAccepted,
+            diagnostics: Some(diagnostics),
+        });
     }
     checks.push(SandboxCheck {
         name: "xcode_license".into(),
@@ -190,10 +362,19 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| project_path.clone());
-    let free_bytes = probe.disk_free_bytes(&disk_root)?;
+    let free_bytes =
+        probe
+            .disk_free_bytes(&disk_root)
+            .map_err(|error| SandboxValidationFailure {
+                error,
+                diagnostics: Some(diagnostics.clone()),
+            })?;
     if free_bytes < MIN_DISK_BYTES {
-        return Err(SandboxPolicyError::DiskInsufficient {
-            available_bytes: free_bytes,
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::DiskInsufficient {
+                available_bytes: free_bytes,
+            },
+            diagnostics: Some(diagnostics),
         });
     }
     checks.push(SandboxCheck {
@@ -205,6 +386,7 @@ pub async fn validate_sandbox_policy_with_probe<P: SandboxProbe>(
     Ok(SandboxPolicyResponse {
         status: SandboxStatus::Ok,
         checks,
+        diagnostics: Some(diagnostics),
     })
 }
 
@@ -222,24 +404,49 @@ pub fn sandbox_error_descriptor(error: &SandboxPolicyError) -> &'static ToolErro
 }
 
 /// Convert sandbox errors into MCP error data.
-pub fn sandbox_error_to_error_data(error: SandboxPolicyError) -> ErrorData {
-    let descriptor = sandbox_error_descriptor(&error);
+pub fn sandbox_error_to_error_data(failure: SandboxValidationFailure) -> ErrorData {
+    let descriptor = sandbox_error_descriptor(&failure.error);
+    let mut details = json!({ "details": failure.error.to_string() });
+    if let Some(diagnostics) = failure.diagnostics {
+        details["diagnostics"] =
+            serde_json::to_value(diagnostics).expect("diagnostics should serialize");
+    }
     descriptor
         .builder()
         .sandbox_state(SandboxState::Blocked)
         .retryable(false)
-        .details(json!({ "details": error.to_string() }))
+        .details(details)
         .build()
         .expect("descriptor is valid")
 }
 
-fn normalize_project_path(path: &Path) -> Result<PathBuf, SandboxPolicyError> {
+fn normalize_project_path(path: &Path) -> Result<PathBuf, SandboxValidationFailure> {
     if !crate::lib::paths::is_nonempty_absolute(path) {
-        return Err(SandboxPolicyError::PathNotAllowed {
-            path: path.to_path_buf(),
+        return Err(SandboxValidationFailure {
+            error: SandboxPolicyError::PathNotAllowed {
+                path: path.to_path_buf(),
+            },
+            diagnostics: None,
         });
     }
     Ok(path.to_path_buf())
+}
+
+fn build_diagnostics(
+    probe_mode: &str,
+    developer_dir: PathBuf,
+    required_sdks: Vec<String>,
+    sdk_inventory: &SdkInventory,
+) -> SandboxDiagnostics {
+    SandboxDiagnostics {
+        probe_mode: probe_mode.to_string(),
+        effective_developer_dir: developer_dir.display().to_string(),
+        effective_required_sdks: required_sdks,
+        detected_sdks_raw: sdk_inventory.raw.clone(),
+        detected_sdks_normalized: sdk_inventory.normalized.clone(),
+        xcodebuild_invocation: sdk_inventory.invocation.clone(),
+        notes: sdk_inventory.notes.clone(),
+    }
 }
 
 fn sdk_is_present(sdks: &[String], required: &str) -> bool {
@@ -281,8 +488,13 @@ mod tests {
         fn list_sdks(
             &self,
             _developer_dir: &std::path::Path,
-        ) -> Result<Vec<String>, crate::lib::errors::SandboxPolicyError> {
-            Ok(self.sdks.clone())
+        ) -> Result<SdkInventory, crate::lib::errors::SandboxPolicyError> {
+            Ok(SdkInventory {
+                raw: self.sdks.clone(),
+                normalized: self.sdks.clone(),
+                invocation: Some("fake-xcodebuild -showsdks".into()),
+                notes: Vec::new(),
+            })
         }
 
         fn devtools_security_enabled(
@@ -337,16 +549,22 @@ mod tests {
             disk_bytes: 500 * 1024 * 1024,
         };
 
-        let error = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
+        let failure = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
             .await
             .expect_err("should error when SDK is missing");
 
-        match error {
+        match failure.error {
             crate::lib::errors::SandboxPolicyError::MissingSdk { name } => {
                 assert_eq!(name, "visionOS")
             }
             other => panic!("Unexpected error: {other:?}", other = other),
         }
+        let diagnostics = failure
+            .diagnostics
+            .expect("missing sdk should include diagnostics");
+        assert_eq!(diagnostics.probe_mode, "system");
+        assert_eq!(diagnostics.effective_required_sdks, vec!["visionOS"]);
+        assert!(diagnostics.detected_sdks_raw.is_empty());
     }
 
     #[tokio::test]
@@ -369,6 +587,15 @@ mod tests {
             .expect("prefix match should be accepted");
 
         assert_eq!(response.status, SandboxStatus::Ok);
+        let diagnostics = response
+            .diagnostics
+            .expect("successful response should include diagnostics");
+        assert!(diagnostics
+            .detected_sdks_raw
+            .contains(&"xros26.0".to_string()));
+        assert!(diagnostics
+            .detected_sdks_normalized
+            .contains(&"xros26.0".to_string()));
     }
 
     #[tokio::test]
@@ -386,11 +613,11 @@ mod tests {
             disk_bytes: 500 * 1024 * 1024,
         };
 
-        let error = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
+        let failure = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
             .await
             .expect_err("should error for disallowed path");
 
-        match error {
+        match failure.error {
             crate::lib::errors::SandboxPolicyError::PathNotAllowed { path } => {
                 assert_eq!(path, PathBuf::from("/tmp/disallowed-project"))
             }
@@ -438,7 +665,18 @@ mod tests {
         let error = SandboxPolicyError::MissingSdk {
             name: "visionOS".into(),
         };
-        let data = extract_data(&sandbox_error_to_error_data(error));
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error,
+            diagnostics: Some(SandboxDiagnostics {
+                probe_mode: "env".into(),
+                effective_developer_dir: "/Applications/Xcode.app/Contents/Developer".into(),
+                effective_required_sdks: vec!["visionOS".into()],
+                detected_sdks_raw: vec![],
+                detected_sdks_normalized: vec![],
+                xcodebuild_invocation: None,
+                notes: vec!["VISIONOS_SANDBOX_SDKS is empty".into()],
+            }),
+        }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
             Some("sdk_missing")
@@ -449,6 +687,11 @@ mod tests {
         );
         assert_eq!(data.get("retryable").and_then(Value::as_bool), Some(false));
         assert!(data.get("remediation").and_then(Value::as_str).is_some());
+        assert!(data
+            .get("details")
+            .and_then(Value::as_object)
+            .and_then(|details| details.get("diagnostics"))
+            .is_some());
     }
 
     #[test]
@@ -456,7 +699,10 @@ mod tests {
         let error = SandboxPolicyError::PathNotAllowed {
             path: PathBuf::from("/tmp/disallowed-project"),
         };
-        let data = extract_data(&sandbox_error_to_error_data(error));
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error,
+            diagnostics: None,
+        }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
             Some("path_not_allowed")
@@ -470,9 +716,10 @@ mod tests {
 
     #[test]
     fn sandbox_error_data_includes_structured_fields_for_devtools_disabled() {
-        let data = extract_data(&sandbox_error_to_error_data(
-            SandboxPolicyError::DevToolsSecurityDisabled,
-        ));
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error: SandboxPolicyError::DevToolsSecurityDisabled,
+            diagnostics: None,
+        }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
             Some("devtools_security_disabled")
@@ -486,9 +733,10 @@ mod tests {
 
     #[test]
     fn sandbox_error_data_includes_structured_fields_for_disk_insufficient() {
-        let data = extract_data(&sandbox_error_to_error_data(
-            SandboxPolicyError::DiskInsufficient { available_bytes: 1 },
-        ));
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error: SandboxPolicyError::DiskInsufficient { available_bytes: 1 },
+            diagnostics: None,
+        }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
             Some("disk_insufficient")
@@ -502,9 +750,10 @@ mod tests {
 
     #[test]
     fn sandbox_error_data_includes_structured_fields_for_xcode_unlicensed() {
-        let data = extract_data(&sandbox_error_to_error_data(
-            SandboxPolicyError::LicenseNotAccepted,
-        ));
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error: SandboxPolicyError::LicenseNotAccepted,
+            diagnostics: None,
+        }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
             Some("xcode_unlicensed")
@@ -518,8 +767,11 @@ mod tests {
 
     #[test]
     fn sandbox_error_data_includes_structured_fields_for_internal_error() {
-        let data = extract_data(&sandbox_error_to_error_data(SandboxPolicyError::Internal {
-            message: "oops".into(),
+        let data = extract_data(&sandbox_error_to_error_data(SandboxValidationFailure {
+            error: SandboxPolicyError::Internal {
+                message: "oops".into(),
+            },
+            diagnostics: None,
         }));
         assert_eq!(
             data.get("code").and_then(Value::as_str),
