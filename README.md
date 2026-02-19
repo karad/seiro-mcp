@@ -1,4 +1,5 @@
-# ![Seiro MCP Logo](./docs/assets/seiro-mcp-logo.png)
+<h1 tabindex="-1" class="heading-element" dir="auto" style="text-align: center; padding: 3rem 0;
+"><a target="_blank" rel="noopener noreferrer" href="/karad/seiro-mcp/blob/main/docs/assets/seiro-mcp-logo.png"><img src="/karad/seiro-mcp/raw/main/docs/assets/seiro-mcp-logo.png" alt="Seiro MCP Logo" style="max-width: 40%;min-width: 200px;"></a></h1>
 
 [![CI](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
