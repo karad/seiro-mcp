@@ -1,5 +1,6 @@
-<h1 tabindex="-1" class="heading-element" dir="auto" style="text-align: center; padding: 3rem 0;
-"><img src="./docs/assets/seiro-mcp-logo.png" alt="Seiro MCP Logo" style="max-width: 40%;min-width: 200px;"></h1>
+<p align="center">
+  <img src="./docs/assets/seiro-mcp-logo.png" alt="Seiro MCP Logo" width="240" />
+</p>
 
 [![CI](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
