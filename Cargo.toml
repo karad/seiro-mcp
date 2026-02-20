@@ -1,6 +1,6 @@
 [package]
 name = "seiro-mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows."
 license = "MIT"
