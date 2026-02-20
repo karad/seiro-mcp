@@ -67,27 +67,29 @@ These are intended for local development and tests; do not rely on them for prod
 ```bash
 MCP_SHARED_TOKEN=<token> \
 MCP_CONFIG_PATH=$PWD/config.toml \
-npx @modelcontextprotocol/inspector target/release/seiro-mcp -- --transport=stdio
+npx @modelcontextprotocol/inspector seiro-mcp -- --transport=stdio
 ```
 - Always launch via an MCP client to avoid `MCP_CLIENT_REQUIRED`.
+- If you are developing from source, replace `seiro-mcp` with `target/release/seiro-mcp`.
 
 ### Inspector (tcp mode)
 ```bash
 MCP_SHARED_TOKEN=<token> \
 MCP_CONFIG_PATH=$PWD/config.toml \
 npx @modelcontextprotocol/inspector mcp connect tcp://127.0.0.1:8787 -- \
-  target/release/seiro-mcp --transport=tcp --config=$PWD/config.toml
+  seiro-mcp --transport=tcp --config=$PWD/config.toml
 ```
 - Startup fails on port conflicts (`EADDRINUSE`).
+- If you are developing from source, replace `seiro-mcp` with `target/release/seiro-mcp`.
 
 ### Codex CLI example
 ```toml
 [mcp_servers.operational]
-command = "/Users/<user>/sources/repos/seiro-mcp/target/release/seiro-mcp"
+command = "/Users/<user>/.cargo/bin/seiro-mcp"
 args = ["--transport=stdio"]
-env.MCP_CONFIG_PATH = "/Users/<user>/sources/repos/seiro-mcp/config.toml"
+env.MCP_CONFIG_PATH = "/absolute/path/to/config.toml"
 env.MCP_SHARED_TOKEN = "<token>"
-working_directory = "/Users/<user>/sources/repos/seiro-mcp"
+working_directory = "/absolute/path/to/working-directory"
 ```
 - For TCP, set `args = ["--transport=tcp"]` and align `server.host` / `server.port` in config.
 
@@ -107,6 +109,7 @@ working_directory = "/Users/<user>/sources/repos/seiro-mcp"
 | `AUTH_TOKEN_MISMATCH` (42) | Align `MCP_SHARED_TOKEN` or `--token` with `[auth].token`; spaces or short values fail. |
 | `MCP_TOKEN_REQUIRED` (43) | Token missing. Provide a 16–128 char ASCII/UTF-8 value. |
 | `MCP_CLIENT_REQUIRED` (44) | You ran `cargo run` directly. Launch via Inspector / Codex as a child process. |
+| `seiro-mcp: command not found` | Confirm `cargo install seiro-mcp --locked` completed and use absolute path from `which seiro-mcp` in client config. |
 | `sdk_missing` | Check `details.diagnostics` from `validate_sandbox_policy`, optionally run `inspect_xcode_sdks`, then install/fix SDK settings and retry. |
 | `artifact_expired` | Call `fetch_build_output` within TTL; raise `visionos.artifact_ttl_secs` if needed and document the retrieval flow. |
 | TCP connect fail (`EADDRINUSE`) | Resolve port conflicts on `server.port` and retry. |

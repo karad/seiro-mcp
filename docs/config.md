@@ -78,6 +78,18 @@ This makes `build_visionos_app` and `validate_sandbox_policy` skip `path_not_all
 - `MCP_SHARED_TOKEN` is compared against `[auth].token`; CLI `--token` wins (blank values are invalid).
 - `src/server/config/mod.rs::tests::load_config_from_env_override` covers loading with `tests/fixtures/config_valid.toml`.
 
+### Installed binary workflow (recommended for users)
+
+When installed via `cargo install seiro-mcp --locked`, launch the binary directly and pass absolute paths via env:
+
+```bash
+MCP_CONFIG_PATH=/absolute/path/to/config.toml \
+MCP_SHARED_TOKEN=<shared-token> \
+seiro-mcp --transport=stdio
+```
+
+For Codex CLI, point `command` to the installed binary path (for example `/Users/<user>/.cargo/bin/seiro-mcp`) and keep `env.MCP_CONFIG_PATH` / `env.MCP_SHARED_TOKEN` aligned with this document.
+
 ## Validation rationale
 
 - `server.port` is validated by `src/server/config/server.rs::validate_port`.

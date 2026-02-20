@@ -1,8 +1,9 @@
 //! Utilities for visionOS artifact directories and file operations.
 
 use std::{
+    env,
     fs::{self, File},
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -14,6 +15,188 @@ use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 use crate::lib::errors::ArtifactError;
 
 const ZIP_DIR_PERMISSIONS: u32 = 0o755;
+const CODEX_HOME_ENV: &str = "CODEX_HOME";
+const HOME_ENV: &str = "HOME";
+
+/// Skill file payload to install into Codex skill directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BundledSkillFile<'a> {
+    /// Path relative to skill directory (for example: `SKILL.md`).
+    pub relative_path: &'a str,
+    /// UTF-8 content to write.
+    pub content: &'a str,
+}
+
+/// File write status for `install_skill_files`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillInstallStatus {
+    Planned,
+    Installed,
+    SkippedExisting,
+}
+
+/// Result summary for skill file installation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillInstallResult {
+    pub status: SkillInstallStatus,
+    pub written_files: Vec<String>,
+}
+
+/// Removal status for `remove_skill_directory`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillRemoveStatus {
+    Removed,
+    NotFound,
+}
+
+/// Result summary for skill directory removal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillRemoveResult {
+    pub status: SkillRemoveStatus,
+    pub removed_files: Vec<String>,
+}
+
+/// Resolve Codex skills root directory.
+///
+/// Resolution order:
+/// 1. `$CODEX_HOME/.codex/skills` when `CODEX_HOME` is set.
+/// 2. `$HOME/.codex/skills` otherwise.
+pub fn resolve_codex_skills_root() -> Result<PathBuf, &'static str> {
+    resolve_codex_skills_root_from(env::var_os(CODEX_HOME_ENV), env::var_os(HOME_ENV))
+}
+
+fn resolve_codex_skills_root_from(
+    codex_home: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Result<PathBuf, &'static str> {
+    if let Some(codex_home) = codex_home {
+        return Ok(PathBuf::from(codex_home).join(".codex").join("skills"));
+    }
+
+    if let Some(home) = home {
+        return Ok(PathBuf::from(home).join(".codex").join("skills"));
+    }
+
+    Err("CODEX_HOME and HOME are both unset")
+}
+
+/// Resolve full installation directory for a named skill.
+pub fn resolve_skill_install_dir(skill_name: &str) -> Result<PathBuf, &'static str> {
+    Ok(resolve_codex_skills_root()?.join(skill_name))
+}
+
+/// Install bundled skill files into destination directory.
+///
+/// In dry-run mode this function does not mutate filesystem state.
+/// Without `force`, existing files are preserved and no write happens.
+pub fn install_skill_files(
+    destination_dir: &Path,
+    files: &[BundledSkillFile<'_>],
+    force: bool,
+    dry_run: bool,
+) -> Result<SkillInstallResult, io::Error> {
+    let written_files = files
+        .iter()
+        .map(|file| file.relative_path.to_string())
+        .collect::<Vec<_>>();
+
+    let has_existing = files
+        .iter()
+        .any(|file| destination_dir.join(file.relative_path).exists());
+    if has_existing && !force {
+        return Ok(SkillInstallResult {
+            status: SkillInstallStatus::SkippedExisting,
+            written_files,
+        });
+    }
+
+    if dry_run {
+        return Ok(SkillInstallResult {
+            status: SkillInstallStatus::Planned,
+            written_files,
+        });
+    }
+
+    fs::create_dir_all(destination_dir)?;
+    for file in files {
+        let path = destination_dir.join(file.relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, file.content.as_bytes())?;
+    }
+
+    Ok(SkillInstallResult {
+        status: SkillInstallStatus::Installed,
+        written_files,
+    })
+}
+
+/// Remove skill directory and return removed relative files.
+///
+/// If the directory does not exist, returns `NotFound` without error.
+pub fn remove_skill_directory(destination_dir: &Path) -> Result<SkillRemoveResult, io::Error> {
+    if !destination_dir.exists() {
+        return Ok(SkillRemoveResult {
+            status: SkillRemoveStatus::NotFound,
+            removed_files: Vec::new(),
+        });
+    }
+
+    let mut removed_files = Vec::new();
+    collect_relative_files(destination_dir, destination_dir, &mut removed_files)?;
+    removed_files.sort();
+
+    if destination_dir.is_dir() {
+        fs::remove_dir_all(destination_dir)?;
+    } else {
+        fs::remove_file(destination_dir)?;
+    }
+
+    Ok(SkillRemoveResult {
+        status: SkillRemoveStatus::Removed,
+        removed_files,
+    })
+}
+
+fn collect_relative_files(
+    base: &Path,
+    current: &Path,
+    out: &mut Vec<String>,
+) -> Result<(), io::Error> {
+    if current.is_file() {
+        let relative = current
+            .strip_prefix(base)
+            .unwrap_or(current)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !relative.is_empty() {
+            out.push(relative);
+        }
+        return Ok(());
+    }
+
+    if !current.is_dir() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_relative_files(base, &path, out)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(base)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push(relative);
+        }
+    }
+
+    Ok(())
+}
 
 /// Ensure a job directory such as `target/visionos-builds/<job_id>/` exists.
 pub fn ensure_job_dir(base_dir: &Path, job_id: &Uuid) -> Result<PathBuf, ArtifactError> {
@@ -202,7 +385,7 @@ fn add_directory_to_zip(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Read};
+    use std::{fs, io::Read, path::PathBuf};
 
     use chrono::{Duration, Utc};
     use tempfile::tempdir;
@@ -291,5 +474,41 @@ mod tests {
                 .expect("can read child.txt");
             assert_eq!(child_contents, "child");
         }
+    }
+
+    #[test]
+    fn resolve_codex_skills_root_prefers_codex_home() {
+        let root = resolve_codex_skills_root_from(
+            Some("/tmp/codex-home".into()),
+            Some("/tmp/home".into()),
+        )
+        .expect("resolution succeeds");
+
+        assert_eq!(root, PathBuf::from("/tmp/codex-home/.codex/skills"));
+    }
+
+    #[test]
+    fn resolve_codex_skills_root_falls_back_to_home() {
+        let root = resolve_codex_skills_root_from(None, Some("/tmp/home".into()))
+            .expect("resolution succeeds");
+
+        assert_eq!(root, PathBuf::from("/tmp/home/.codex/skills"));
+    }
+
+    #[test]
+    fn install_skill_files_dry_run_is_non_mutating() {
+        let temp = tempdir().expect("can create temp directory");
+        let destination = temp.path().join("skills").join("sample-skill");
+        let files = [BundledSkillFile {
+            relative_path: "SKILL.md",
+            content: "sample",
+        }];
+
+        let result =
+            install_skill_files(&destination, &files, false, true).expect("dry-run should succeed");
+
+        assert_eq!(result.status, SkillInstallStatus::Planned);
+        assert_eq!(result.written_files, vec!["SKILL.md".to_string()]);
+        assert!(!destination.exists(), "dry-run must not create directory");
     }
 }

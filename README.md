@@ -39,7 +39,7 @@ docs/             # configuration, runbook, review checklists
 
 ## Installation
 
-is your DevToolsSecurity status is disabled, run `sudo DevToolsSecurity -enable` command.
+If DevToolsSecurity is disabled, enable it first:
 
 ```
 $ DevToolsSecurity -status
@@ -48,19 +48,13 @@ Developer mode is currently disabled.
 $ sudo DevToolsSecurity -enable
 ```
 
-### 1. Clone this repository
+### 1. Install from crates.io
 
 ```bash
-$ git clone git@github.com:karad/seiro-mcp.git
+cargo install seiro-mcp --locked
 ```
 
-### 2. Fetch dependencies
-
-```bash
-cargo fetch
-```
-
-### 3. Prepare `config.toml`
+### 2. Prepare `config.toml`
 
 (see [`docs/config.md`](docs/config.md) for details)
 
@@ -93,41 +87,62 @@ cargo fetch
 
 - When separating dev/prod configs, add `MCP_CONFIG_PATH` to the launch environment:
   ```bash
-  MCP_CONFIG_PATH=$PWD/config.toml cargo run --quiet
+  MCP_CONFIG_PATH=/absolute/path/to/config.toml seiro-mcp --help
   ```
 - MCP clients (e.g., Codex CLI) can pass `env.MCP_CONFIG_PATH` as well.
 - Behavior is covered in `src/server/config/mod.rs::tests::load_config_from_env_override`.
 
-##### Run the build and checks
+### 3. Optional: install and run bundled skill
 
-Recommended (runs the minimum local quality gate):
 ```bash
+seiro-mcp skill install seiro-mcp-visionos-build-operator --dry-run
+seiro-mcp skill install seiro-mcp-visionos-build-operator
+```
+
+- The bundled skill name uses the `seiro-mcp-` prefix to avoid collisions.
+- Use `seiro-mcp skill remove seiro-mcp-visionos-build-operator` to roll back.
+- `skill remove` returns `not_found` without failing when the skill is already absent.
+- Verify compatibility with `seiro-mcp --version` before skill operations.
+- For this release line, the bundled skill target is `seiro-mcp-visionos-build-operator`.
+- Use `seiro-mcp --help`, `seiro-mcp skill --help`, and `seiro-mcp --version` for self-check.
+  ```bash
+  seiro-mcp --help
+  seiro-mcp skill --help
+  seiro-mcp skill install --help
+  ```
+
+## For Contributors (clone + local build)
+
+If you are developing this repository itself, use the clone flow:
+
+```bash
+git clone git@github.com:karad/seiro-mcp.git
+cd seiro-mcp
+cargo fetch
+cargo run -p xtask -- langscan
+cargo run -p xtask -- docs-langscan
+cargo run -p xtask -- check-docs-links
 cargo run -p xtask -- preflight
 ```
 
-Manual alternative:
+If any step fails, fix and rerun.
+- On success, `target/release/seiro-mcp` is produced.
+
+## For Maintainers (release readiness)
+
+Before `cargo publish`, run:
+
 ```bash
-cargo fetch
 cargo check
 cargo test --all -- --nocapture
 cargo fmt -- --check
 cargo clippy -- -D warnings
 cargo build --release
+cargo package --list
+cargo publish --dry-run
 ```
 
-Additional repository checks:
-```bash
-cargo run -p xtask -- langscan
-cargo run -p xtask -- docs-langscan
-cargo run -p xtask -- check-docs-links
-cargo run -p xtask -- loc-baseline
-cargo run -p xtask -- loc-guard
-cargo run -p xtask -- api-baseline
-```
-
-
-If any step fails, fix and rerun.
-- On success, `target/release/seiro-mcp` is produced and can be referenced by MCP clients.
+`--locked` is recommended for reproducibility, but not mandatory for all environments.
 
 
 ## Using from Codex CLI
@@ -136,15 +151,15 @@ Add an entry like the following to Codex CLI config (`~/.codex/config.toml`) to 
 
 ```toml
 [mcp_servers.seiro_mcp]
-command = "/<this-repo-path>/target/release/seiro-mcp"
+command = "/Users/<your-username>/.cargo/bin/seiro-mcp"
 args = ["--transport=stdio"]
-env.MCP_CONFIG_PATH = "/<this-repo-path>/config.toml"
+env.MCP_CONFIG_PATH = "/absolute/path/to/config.toml"
 env.MCP_SHARED_TOKEN = "change-me-please"
-working_directory = "/<this-repo-path>"
+working_directory = "/absolute/path/to/working-directory"
 ```
 
 - Codex CLI does not expand `${HOME}`, so use absolute paths and replace `<your-username>`.
-- Run `cargo build --release` beforehand so `target/release/seiro-mcp` exists.
+- Confirm with `which seiro-mcp` and use the absolute path from your environment.
 - Switch server configs via `env.MCP_CONFIG_PATH`; ensure `env.MCP_SHARED_TOKEN` matches `[auth].token`.
 - Restart Codex CLI and confirm `mcp list` shows the visionOS tools.
 
@@ -157,9 +172,9 @@ working_directory = "/<this-repo-path>"
  - Example with Inspector:
    ```bash
    MCP_SHARED_TOKEN=<shared-token> MCP_CONFIG_PATH=$PWD/config.toml \
-     npx @modelcontextprotocol/inspector cargo run --quiet -- --transport=stdio
+     npx @modelcontextprotocol/inspector seiro-mcp --transport=stdio
    ```
- - When registering with Codex CLI or other editor extensions, also run `cargo run --quiet` as the subprocess.
+ - If you are developing from source, `cargo run --quiet -- --transport=stdio` remains available.
 
 ### 2. Validate sandbox policy before building
 
@@ -223,26 +238,20 @@ mcp call fetch_build_output '{
 Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 
 - MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output` directly.
-- Skill-assisted mode: explicitly request the `visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
+- Skill-assisted mode: explicitly request the `seiro-mcp-visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
 
 Skill path in this repository:
 - `skills/visionos-build-operator/SKILL.md`
 
-Install for users in other projects:
-- Copy `skills/visionos-build-operator/` into the user's Codex home skill directory:
-  - `<user-specific CODEX_HOME>/.codex/skills/visionos-build-operator/`
-- If `CODEX_HOME` is not set, use the default:
-  - `~/.codex/skills/visionos-build-operator/`
-- Example:
-  ```bash
-  mkdir -p "$HOME/.codex/skills/visionos-build-operator"
-  cp -R /<path-to-seiro-mcp>/skills/visionos-build-operator/* \
-    "$HOME/.codex/skills/visionos-build-operator/"
-  ```
+Install from CLI:
+```bash
+seiro-mcp skill install seiro-mcp-visionos-build-operator --dry-run
+seiro-mcp skill install seiro-mcp-visionos-build-operator
+```
 
 Explicit invocation examples:
-- `Use visionos-build-operator for this visionOS build task.`
-- `Please run this using the visionos-build-operator skill.`
+- `Use seiro-mcp-visionos-build-operator for this visionOS build task.`
+- `Please run this using the seiro-mcp-visionos-build-operator skill.`
 
 Important:
 - Skills provide orchestration guidance.
@@ -279,6 +288,7 @@ Important:
 - **Token missing**: startup is blocked if `auth.token` is empty; set a random 16+ character string.
 - **`AUTH_TOKEN_MISMATCH` / `MCP_TOKEN_REQUIRED`**: ensure `MCP_SHARED_TOKEN` or `--token` matches `[auth].token` and is 16–128 characters.
 - **`MCP_CLIENT_REQUIRED`**: occurs when running `cargo run` directly; always launch via an MCP client (Inspector / Codex, etc.).
+- **`seiro-mcp: command not found`**: verify installation and use the absolute path from `which seiro-mcp` in client settings.
 - **`path_not_allowed`**: add the project parent to `visionos.allowed_paths` and restart.
 - **`scheme_not_allowed`**: add the scheme to `visionos.allowed_schemes` and restart.
 - **`sdk_missing`**: check `details.diagnostics` first; if `probe_mode` is `env`, verify `VISIONOS_SANDBOX_SDKS`. Then run `inspect_xcode_sdks` and retry after SDK/config fixes.

@@ -19,7 +19,7 @@ This repository ships the visionOS build MCP server. Follow these steps to finis
 
 ## Installation
 
-is your DevToolsSecurity status is disabled, run `sudo DevToolsSecurity -enable` command.
+If DevToolsSecurity is disabled, enable it first:
 
 ```
 $ DevToolsSecurity -status
@@ -28,19 +28,15 @@ Developer mode is currently disabled.
 $ sudo DevToolsSecurity -enable
 ```
 
-### 1. Clone this repository
+### 1. Install from crates.io
 
 ```bash
-$ git clone git@github.com:karad/seiro-mcp.git
+cargo install seiro-mcp --locked
 ```
 
-### 2. Fetch dependencies
+`--locked` is recommended for reproducibility, but not mandatory for all environments.
 
-```bash
-cargo fetch
-```
-
-### 3. Prepare `config.toml`
+### 2. Prepare `config.toml`
 
 (see [`docs/config.md`](./config.md) for details)
 
@@ -73,19 +69,28 @@ cargo fetch
 
 - When separating dev/prod configs, add `MCP_CONFIG_PATH` to the launch environment:
   ```bash
-  MCP_CONFIG_PATH=$PWD/config.toml cargo run --quiet
+  MCP_CONFIG_PATH=/absolute/path/to/config.toml seiro-mcp --help
   ```
 - MCP clients (e.g., Codex CLI) can pass `env.MCP_CONFIG_PATH` as well.
 - Behavior is covered in `src/server/config/mod.rs::tests::load_config_from_env_override`.
 
-##### Run the build and checks
+### 3. Optional: install bundled skill
 
-Recommended (runs the minimum local quality gate):
 ```bash
-cargo run -p xtask -- preflight
+seiro-mcp skill install seiro-mcp-visionos-build-operator --dry-run
+seiro-mcp skill install seiro-mcp-visionos-build-operator
 ```
 
-Manual alternative:
+- Use `seiro-mcp skill remove seiro-mcp-visionos-build-operator` to remove it.
+- If the skill is already absent, `skill remove` returns `not_found` and exits successfully.
+- Use `seiro-mcp --version` to confirm the installed binary before skill operations.
+- Skill names for bundled content must use the `seiro-mcp-` prefix.
+- The current bundled skill target is `seiro-mcp-visionos-build-operator`.
+
+### 4. Contributor-only build checks
+
+If you are contributing to this repository, run:
+
 ```bash
 cargo fetch
 cargo check
@@ -100,14 +105,19 @@ Additional repository checks:
 cargo run -p xtask -- langscan
 cargo run -p xtask -- docs-langscan
 cargo run -p xtask -- check-docs-links
-cargo run -p xtask -- loc-baseline
-cargo run -p xtask -- loc-guard
-cargo run -p xtask -- api-baseline
 ```
+
+### 5. Maintainer publish readiness (before `cargo publish`)
+
+```bash
+cargo package --list
+cargo publish --dry-run
+```
+
+Use this sequence only when preparing a crates.io release.
 
 
 If any step fails, fix and rerun.
-- On success, `target/release/seiro-mcp` is produced and can be referenced by MCP clients.
 
 
 ## Using from Codex CLI
@@ -116,15 +126,15 @@ Add an entry like the following to Codex CLI config (`~/.codex/config.toml`) to 
 
 ```toml
 [mcp_servers.seiro_mcp]
-command = "/<this-repo-path>/target/release/seiro-mcp"
+command = "/Users/<your-username>/.cargo/bin/seiro-mcp"
 args = ["--transport=stdio"]
-env.MCP_CONFIG_PATH = "/<this-repo-path>/config.toml"
+env.MCP_CONFIG_PATH = "/absolute/path/to/config.toml"
 env.MCP_SHARED_TOKEN = "change-me-please"
-working_directory = "/<this-repo-path>"
+working_directory = "/absolute/path/to/working-directory"
 ```
 
 - Codex CLI does not expand `${HOME}`, so use absolute paths and replace `<your-username>`.
-- Run `cargo build --release` beforehand so `target/release/seiro-mcp` exists.
+- Confirm with `which seiro-mcp` and use the absolute path from your environment.
 - Switch server configs via `env.MCP_CONFIG_PATH`; ensure `env.MCP_SHARED_TOKEN` matches `[auth].token`.
 - Restart Codex CLI and confirm `mcp list` shows the visionOS tools.
 
@@ -137,9 +147,9 @@ working_directory = "/<this-repo-path>"
  - Example with Inspector:
    ```bash
    MCP_SHARED_TOKEN=<shared-token> MCP_CONFIG_PATH=$PWD/config.toml \
-     npx @modelcontextprotocol/inspector cargo run --quiet -- --transport=stdio
+     npx @modelcontextprotocol/inspector seiro-mcp --transport=stdio
    ```
- - When registering with Codex CLI or other editor extensions, also run `cargo run --quiet` as the subprocess.
+ - If you are developing from source, `cargo run --quiet -- --transport=stdio` remains available.
 
 ### 2. Validate sandbox policy before building
 
@@ -209,8 +219,8 @@ When to choose which mode:
 - Skill-assisted: best when you want a standardized operational sequence and error handling guidance.
 
 How to invoke explicitly:
-- `Use visionos-build-operator for this task.`
-- `Run this via the visionos-build-operator skill.`
+- `Use seiro-mcp-visionos-build-operator for this task.`
+- `Run this via the seiro-mcp-visionos-build-operator skill.`
 
 The skill still executes the same MCP tools in order:
 1. `validate_sandbox_policy`
