@@ -100,7 +100,7 @@ fn skill_prefix_and_version_compat_guidance_are_documented() {
         fs::read_to_string(root.join("docs/quickstart.md")).expect("quickstart should be readable");
     let release =
         fs::read_to_string(root.join("docs/release.md")).expect("release should be readable");
-    let skill = fs::read_to_string(root.join("skills/visionos-build-operator/SKILL.md"))
+    let skill = fs::read_to_string(root.join("skills/seiro-mcp-visionos-build-operator/SKILL.md"))
         .expect("skill file should be readable");
 
     assert!(

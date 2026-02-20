@@ -241,7 +241,7 @@ Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 - Skill-assisted mode: explicitly request the `seiro-mcp-visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
 
 Skill path in this repository:
-- `skills/visionos-build-operator/SKILL.md`
+- `skills/seiro-mcp-visionos-build-operator/SKILL.md`
 
 Install from CLI:
 ```bash

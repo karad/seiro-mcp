@@ -29,7 +29,7 @@ pub const BUNDLED_VISIONOS_SKILL_NAME: &str = "seiro-mcp-visionos-build-operator
 const BUNDLED_SKILL_MAIN_FILE: &str = "SKILL.md";
 /// Embedded bundled skill content copied by `skill install`.
 const BUNDLED_VISIONOS_SKILL_CONTENT: &str =
-    include_str!("../../skills/visionos-build-operator/SKILL.md");
+    include_str!("../../skills/seiro-mcp-visionos-build-operator/SKILL.md");
 
 /// Validate skill name prefix.
 pub fn validate_skill_name_prefix(skill_name: &str) -> bool {

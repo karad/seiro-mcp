@@ -211,7 +211,7 @@ mcp call fetch_build_output '{
 
 You can run the same build flow with the bundled skill:
 
-- Skill file: `skills/visionos-build-operator/SKILL.md`
+- Skill file: `skills/seiro-mcp-visionos-build-operator/SKILL.md`
 - Activation policy: explicit invocation only (no auto-suggestion, no auto-apply in v1)
 
 When to choose which mode:
