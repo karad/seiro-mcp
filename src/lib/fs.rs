@@ -14,8 +14,11 @@ use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
 use crate::lib::errors::ArtifactError;
 
+/// Unix permission bits applied to generated ZIP entries.
 const ZIP_DIR_PERMISSIONS: u32 = 0o755;
+/// Environment variable name for Codex home override.
 const CODEX_HOME_ENV: &str = "CODEX_HOME";
+/// Environment variable name for user home directory.
 const HOME_ENV: &str = "HOME";
 
 /// Skill file payload to install into Codex skill directory.
@@ -65,6 +68,7 @@ pub fn resolve_codex_skills_root() -> Result<PathBuf, &'static str> {
     resolve_codex_skills_root_from(env::var_os(CODEX_HOME_ENV), env::var_os(HOME_ENV))
 }
 
+/// Resolve skills root from explicit environment values (testable helper).
 fn resolve_codex_skills_root_from(
     codex_home: Option<std::ffi::OsString>,
     home: Option<std::ffi::OsString>,
@@ -159,6 +163,7 @@ pub fn remove_skill_directory(destination_dir: &Path) -> Result<SkillRemoveResul
     })
 }
 
+/// Recursively collect relative file paths under a base directory.
 fn collect_relative_files(
     base: &Path,
     current: &Path,
@@ -307,6 +312,7 @@ pub fn zip_directory(source: &Path, destination: &Path) -> Result<(), ArtifactEr
     Ok(())
 }
 
+/// Walk and append directory entries into a ZIP archive.
 fn add_directory_to_zip(
     base: &Path,
     current: &Path,

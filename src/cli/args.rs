@@ -114,6 +114,7 @@ impl LaunchProfileArgs {
     }
 }
 
+/// Validate command-level invariants before execution.
 fn validate_command(command: &CliCommand) -> Result<()> {
     use crate::cli::validate_skill_name_prefix;
 

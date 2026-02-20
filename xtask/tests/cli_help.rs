@@ -1,10 +1,12 @@
 use std::process::Command;
 use std::{fs, path::PathBuf};
 
+/// Return compiled xtask binary path provided by Cargo test harness.
 fn xtask_bin() -> &'static str {
     env!("CARGO_BIN_EXE_xtask")
 }
 
+/// Resolve repository root from the xtask crate location.
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -12,6 +14,7 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Run `seiro-mcp` through Cargo and capture command output.
 fn run_seiro_help(args: &[&str]) -> std::process::Output {
     Command::new("cargo")
         .arg("run")

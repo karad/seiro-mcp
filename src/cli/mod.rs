@@ -23,8 +23,11 @@ pub use profile::{
 
 /// Prefix reserved for Seiro-managed bundled skills.
 pub const SKILL_NAME_PREFIX: &str = "seiro-mcp-";
+/// Bundled skill currently shipped by this crate.
 pub const BUNDLED_VISIONOS_SKILL_NAME: &str = "seiro-mcp-visionos-build-operator";
+/// Canonical main markdown file name for bundled skills.
 const BUNDLED_SKILL_MAIN_FILE: &str = "SKILL.md";
+/// Embedded bundled skill content copied by `skill install`.
 const BUNDLED_VISIONOS_SKILL_CONTENT: &str =
     include_str!("../../skills/visionos-build-operator/SKILL.md");
 
@@ -61,6 +64,7 @@ pub fn execute_cli_command(command: CliCommand) -> Result<String> {
     }
 }
 
+/// Install bundled skill files and format a JSON response payload.
 fn install_bundled_skill_to_destination(
     skill_name: &str,
     destination_dir: &Path,
@@ -106,6 +110,7 @@ fn install_bundled_skill_to_destination(
     Ok(serde_json::to_string_pretty(&payload)?)
 }
 
+/// Remove bundled skill files and format a JSON response payload.
 fn remove_bundled_skill_from_destination(
     skill_name: &str,
     skills_root: &Path,
