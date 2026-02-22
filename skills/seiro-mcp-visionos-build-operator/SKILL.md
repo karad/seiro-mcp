@@ -1,19 +1,20 @@
 ---
-name: visionos-build-operator
+name: seiro-mcp-visionos-build-operator
 description: Run seiro-mcp visionOS tools in a safe, explicit sequence (validate_sandbox_policy -> build_visionos_app -> fetch_build_output) when the user explicitly asks to use this skill.
 ---
 
-# visionos-build-operator
+# seiro-mcp-visionos-build-operator
 
 ## Purpose
 
 This skill standardizes the operational flow for visionOS builds on Seiro MCP.
 It does not replace MCP tools. It orchestrates them in a predictable order.
+Its identifier follows the bundled skill prefix policy: `seiro-mcp-`.
 
 ## When to Use / When Not to Use
 
 Use this skill when:
-- The user explicitly asks to use `visionos-build-operator`.
+- The user explicitly asks to use `seiro-mcp-visionos-build-operator`.
 - The user explicitly asks to run the standard visionOS build flow on Seiro MCP.
 
 Do not use this skill when:
@@ -68,7 +69,7 @@ Optional preflight:
 
 Use this concise response template:
 
-- `skill`: `visionos-build-operator`
+- `skill`: `seiro-mcp-visionos-build-operator`
 - `mode`: `explicit-invocation`
 - `steps`:
   - `validate_sandbox_policy`: `ok` or `error(<code>)`

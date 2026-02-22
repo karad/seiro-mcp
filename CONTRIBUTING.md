@@ -5,11 +5,16 @@ Thanks for your interest in contributing!
 ## Quick start
 
 1. Install Rust 1.91.1 (Edition 2021).
-2. Run the local quality gate:
+2. Clone this repository and move into it:
+   ```bash
+   git clone git@github.com:karad/seiro-mcp.git
+   cd seiro-mcp
+   ```
+3. Run the local quality gate:
    ```bash
    cargo run -p xtask -- preflight
    ```
-3. For docs checks:
+4. For docs checks:
    ```bash
    cargo run -p xtask -- docs-langscan
    cargo run -p xtask -- check-docs-links
@@ -34,4 +39,3 @@ Thanks for your interest in contributing!
 
 Please do not open public issues for security reports.
 Email: kazuhiroh+karad@gmail.com (see `SECURITY.md`).
-
