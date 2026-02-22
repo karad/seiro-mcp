@@ -1,6 +1,6 @@
 [package]
 name = "seiro-mcp"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows."
 license = "MIT"
@@ -8,7 +8,7 @@ readme = "README.md"
 repository = "https://github.com/karad/seiro-mcp"
 homepage = "https://github.com/karad/seiro-mcp"
 documentation = "https://karad.github.io/seiro-mcp/"
-keywords = ["mcp", "model-context-protocol", "rmcp", "visionos", "xcodebuild"]
+keywords = ["mcp", "rmcp", "visionos", "xcodebuild"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace]
