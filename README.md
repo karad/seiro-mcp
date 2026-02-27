@@ -54,6 +54,22 @@ $ sudo DevToolsSecurity -enable
 cargo install seiro-mcp --locked
 ```
 
+#### Upgrade from v0.2.1
+
+If you already installed `v0.2.1`, upgrade to `v0.2.2` with:
+
+```bash
+cargo install seiro-mcp --locked --force --version 0.2.2
+seiro-mcp --version
+```
+
+To refresh bundled skill guidance after upgrading:
+
+```bash
+seiro-mcp skill remove seiro-mcp-visionos-build-operator
+seiro-mcp skill install seiro-mcp-visionos-build-operator
+```
+
 ### 2. Prepare `config.toml`
 
 (see [`docs/config.md`](docs/config.md) for details)
@@ -70,6 +86,7 @@ cargo install seiro-mcp --locked
   [visionos]
   allowed_paths = []
   allowed_schemes = []
+  default_project_path = "/absolute/path/to/YourApp.xcodeproj"
   default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
   required_sdks = ["visionOS", "visionOS Simulator"]
   xcode_path = "/Applications/Xcode.app/Contents/Developer"
@@ -204,6 +221,19 @@ mcp call inspect_xcode_sdks '{
 - This read-only tool returns `missing_required_sdks` and the same SDK probe context used for sandbox validation.
 - Recommended troubleshooting order: `validate_sandbox_policy` diagnostics → `inspect_xcode_sdks` (optional) → retry validate/build.
 
+Optional scheme discovery before build:
+
+```bash
+mcp call inspect_xcode_schemes '{
+    "project_path": "/Users/<user>/codex/workspaces/VisionApp/VisionApp.xcodeproj",
+    "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+}'
+```
+- Use this when `project_path` or `scheme` is unknown.
+- If `project_path` is omitted, resolution order is:
+  1. `.xcodeproj` discovered in current working directory
+  2. `visionos.default_project_path` in `config.toml`
+
 ### 3. Start a build with `build_visionos_app`
 
 ```bash
@@ -239,6 +269,7 @@ Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 
 - MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output` directly.
 - Skill-assisted mode: explicitly request the `seiro-mcp-visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
+- If `project_path` or `scheme` is missing in skill-assisted mode, run `inspect_xcode_schemes` first as optional preflight.
 
 Skill path in this repository:
 - `skills/seiro-mcp-visionos-build-operator/SKILL.md`

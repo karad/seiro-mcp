@@ -15,8 +15,9 @@ use crate::{
         self,
         visionos::{
             self, BuildVisionOsAppResponse, FetchBuildOutputRequest, FetchBuildOutputResponse,
-            InspectXcodeSdksRequest, InspectXcodeSdksResponse, SandboxPolicyRequest,
-            SandboxPolicyResponse, VisionOsArtifactStore, VisionOsBuildRequest, VisionOsJobQueue,
+            InspectXcodeSchemesRequest, InspectXcodeSchemesResponse, InspectXcodeSdksRequest,
+            InspectXcodeSdksResponse, SandboxPolicyRequest, SandboxPolicyResponse,
+            VisionOsArtifactStore, VisionOsBuildRequest, VisionOsJobQueue,
         },
         ServerToolRouter,
     },
@@ -150,6 +151,19 @@ impl VisionOsServer {
             Ok(response) => Ok(Json(response)),
             Err(failure) => Err(visionos::sandbox_error_to_error_data(failure)),
         }
+    }
+
+    #[tool(
+        name = "inspect_xcode_schemes",
+        description = "Inspect available Xcode schemes for a project path"
+    )]
+    async fn inspect_xcode_schemes(
+        &self,
+        Parameters(request): Parameters<InspectXcodeSchemesRequest>,
+    ) -> Result<Json<InspectXcodeSchemesResponse>, ErrorData> {
+        visionos::inspect_xcode_schemes(request, &self.config.visionos)
+            .await
+            .map(Json)
     }
 
     #[tool(

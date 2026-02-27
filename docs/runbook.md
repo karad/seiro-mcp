@@ -8,7 +8,7 @@ lang: en
 
 ## Purpose and scope
 
-- Steps to start/stop `seiro-mcp` from Codex CLI / Inspector and exercise the visionOS tools (`validate_sandbox_policy` / `inspect_xcode_sdks` / `build_visionos_app` / `fetch_build_output`) within ~30 minutes.
+- Steps to start/stop `seiro-mcp` from Codex CLI / Inspector and exercise the visionOS tools (`inspect_xcode_schemes` / `validate_sandbox_policy` / `inspect_xcode_sdks` / `build_visionos_app` / `fetch_build_output`) within ~30 minutes.
 - Target OS: macOS 15 / Linux 6.9+. visionOS builds require Xcode 16 + visionOS SDK.
 - Assumes Rust 1.91.1, `cargo`, `bash`/`zsh`.
 
@@ -111,6 +111,7 @@ working_directory = "/absolute/path/to/working-directory"
 | `MCP_CLIENT_REQUIRED` (44) | You ran `cargo run` directly. Launch via Inspector / Codex as a child process. |
 | `seiro-mcp: command not found` | Confirm `cargo install seiro-mcp --locked` completed and use absolute path from `which seiro-mcp` in client config. |
 | `sdk_missing` | Check `details.diagnostics` from `validate_sandbox_policy`, optionally run `inspect_xcode_sdks`, then install/fix SDK settings and retry. |
+| Missing `project_path` / unknown `scheme` | Run `inspect_xcode_schemes` first. If request omits `project_path`, it resolves via current-directory `.xcodeproj` discovery, then `config.toml` `visionos.default_project_path`. |
 | `artifact_expired` | Call `fetch_build_output` within TTL; raise `visionos.artifact_ttl_secs` if needed and document the retrieval flow. |
 | TCP connect fail (`EADDRINUSE`) | Resolve port conflicts on `server.port` and retry. |
 
@@ -122,4 +123,15 @@ working_directory = "/absolute/path/to/working-directory"
 1. Run the build chain above (Clippy after TODO is resolved).
 2. In Inspector stdio mode, confirm `mcp list` shows the visionOS tools.
 3. Restart Codex CLI and confirm `mcp describe operational` shows the visionOS tools, including `inspect_xcode_sdks`.
-4. In the visionOS mock flow, run `validate_sandbox_policy` → `inspect_xcode_sdks` (optional) → `build_visionos_app` → `fetch_build_output` (optionally set `MOCK_XCODEBUILD_BEHAVIOR`).
+4. In the visionOS mock flow, run `inspect_xcode_schemes` (optional preflight) → `validate_sandbox_policy` → `inspect_xcode_sdks` (optional) → `build_visionos_app` → `fetch_build_output` (optionally set `MOCK_XCODEBUILD_BEHAVIOR`).
+
+## Updating installed local skill definitions
+
+When the bundled skill in this repository is updated, refresh local installed copies:
+
+```bash
+seiro-mcp skill remove seiro-mcp-visionos-build-operator
+seiro-mcp skill install seiro-mcp-visionos-build-operator
+```
+
+Use this refresh sequence to pick up new preflight guidance such as `inspect_xcode_schemes`.

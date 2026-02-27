@@ -3,6 +3,41 @@ set -euo pipefail
 
 echo "[mock-xcodebuild] invoked with args: $*" >&2
 
+if [[ "${1:-}" == "-list" || "${2:-}" == "-list" || "${3:-}" == "-list" ]]; then
+  case "${MOCK_XCODEBUILD_BEHAVIOR:-success}" in
+    fail)
+      echo "[mock-xcodebuild] simulated list failure" >&2
+      exit 65
+      ;;
+    parse_invalid)
+      echo "{invalid-json"
+      exit 0
+      ;;
+    no_schemes)
+      cat <<'JSON'
+{
+  "project": {
+    "name": "VisionApp",
+    "schemes": []
+  }
+}
+JSON
+      exit 0
+      ;;
+    *)
+      cat <<'JSON'
+{
+  "project": {
+    "name": "VisionApp",
+    "schemes": ["VisionApp", "VisionAppTests"]
+  }
+}
+JSON
+      exit 0
+      ;;
+  esac
+fi
+
 ARTIFACT_DIR="${VISIONOS_BUILD_ARTIFACT_DIR:-}"
 if [[ -z "${ARTIFACT_DIR}" ]]; then
   echo "[mock-xcodebuild] VISIONOS_BUILD_ARTIFACT_DIR is not set" >&2

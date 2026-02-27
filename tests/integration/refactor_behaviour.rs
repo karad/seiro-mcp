@@ -77,6 +77,7 @@ fn test_server_config(max_build_minutes: u16) -> ServerConfig {
         visionos: VisionOsConfig {
             allowed_paths: vec![workspace],
             allowed_schemes: vec!["VisionApp".into()],
+            default_project_path: None,
             default_destination: "platform=visionOS Simulator,name=Apple Vision Pro".into(),
             required_sdks: vec!["visionOS".into(), "visionOS Simulator".into()],
             xcode_path: PathBuf::from("/Applications/Xcode.app/Contents/Developer"),

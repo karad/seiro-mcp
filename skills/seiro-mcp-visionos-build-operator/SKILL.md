@@ -41,6 +41,11 @@ Collect and confirm these inputs before running the flow:
 
 Optional preflight:
 - Before build, you MAY call `inspect_xcode_sdks` (read-only) to compare SDK detection context with `validate_sandbox_policy`.
+- If `project_path` or `scheme` is missing/unknown, call `inspect_xcode_schemes` first to discover candidate schemes.
+  - If `project_path` is omitted for `inspect_xcode_schemes`, resolution order is:
+    1. `.xcodeproj` discovered in current working directory
+    2. `visionos.default_project_path` from `config.toml`
+  - After discovery, pass the selected `project_path` and `scheme` into the standard 3-step flow below.
 
 2. Run build:
    - Call `build_visionos_app` with confirmed inputs.

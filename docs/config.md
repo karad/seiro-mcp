@@ -26,6 +26,7 @@ Document the `config.toml` keys and validation so misconfiguration is caught dur
 | `[auth]` | `token` | `string` | required | - | Shared secret (16–128 chars). Empty/short values yield `CONFIG_MISSING_FIELD`. `--token` or `MCP_SHARED_TOKEN` must match or `AUTH_TOKEN_MISMATCH` (exit 42) is returned. |
 | `[visionos]` | `allowed_paths` | `string[]` | required | - | Root directories allowed for builds. Absolute paths only when non-empty. Set to `[]` to disable the allowlist check (any absolute path passes this check). Also used by `validate_sandbox_policy`. |
 |  | `allowed_schemes` | `string[]` | required | - | Allowed Xcode scheme names for `build_visionos_app` (1–128 chars, non-empty when non-empty). Set to `[]` to disable the allowlist check (any scheme passes this check). |
+|  | `default_project_path` | `string` | optional | - | Default path for `inspect_xcode_schemes` when request omits `project_path` and no `.xcodeproj` is found in CWD. Must be an absolute `.xcodeproj` or `.xcworkspace` path. |
 |  | `default_destination` | `string` | optional | `platform=visionOS Simulator,name=Apple Vision Pro` | Default `-destination` passed to `xcodebuild`. |
 |  | `required_sdks` | `string[]` | optional | `["visionOS", "visionOS Simulator"]` | SDKs that must be installed; empty elements are invalid. |
 |  | `xcode_path` | `string` | required | - | Developer dir (`xcode-select -p` equivalent). Absolute path. |
@@ -47,6 +48,7 @@ token = "change-me-please"
 [visionos]
 allowed_paths = ["/Users/example/codex/workspaces"]
 allowed_schemes = ["VisionApp", "VisionToolbox"]
+default_project_path = "/Users/example/codex/workspaces/VisionApp.xcodeproj"
 default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
 required_sdks = ["visionOS", "visionOS Simulator"]
 xcode_path = "/Applications/Xcode.app/Contents/Developer"
@@ -57,6 +59,7 @@ cleanup_schedule_secs = 60
 ```
 
 List Xcode `scheme` names in `allowed_schemes`. `build_visionos_app` rejects anything outside this allowlist with `scheme_not_allowed`.
+`inspect_xcode_schemes` resolves `project_path` in this order: request value -> CWD `.xcodeproj` discovery -> `[visionos].default_project_path`.
 
 > Tip: copy `config.example.toml` first, then edit values to avoid missing keys.
 

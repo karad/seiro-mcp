@@ -214,6 +214,7 @@ mod tests {
         VisionOsConfig {
             allowed_paths: vec![workspace],
             allowed_schemes: vec!["VisionApp".into(), "VisionToolbox".into()],
+            default_project_path: None,
             default_destination: "platform=visionOS Simulator,name=Apple Vision Pro".into(),
             required_sdks: vec!["visionOS".into(), "visionOS Simulator".into()],
             xcode_path: PathBuf::from("/Applications/Xcode.app/Contents/Developer"),

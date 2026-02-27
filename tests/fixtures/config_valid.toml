@@ -8,6 +8,7 @@ token = "valid-token-123456"
 [visionos]
 allowed_paths = ["/Users/example/codex/workspaces"]
 allowed_schemes = ["VisionApp", "VisionToolbox"]
+default_project_path = "/Users/example/codex/workspaces/VisionApp.xcodeproj"
 default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
 required_sdks = ["visionOS", "visionOS Simulator"]
 xcode_path = "/Applications/Xcode.app/Contents/Developer"

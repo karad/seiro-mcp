@@ -6,7 +6,7 @@ lang: en
 
 # Quickstart
 
-This repository ships the visionOS build MCP server. Follow these steps to finish `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo build --release` within ~30 minutes on a fresh machine and call the three tools (`validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output`) from an MCP client.
+This repository ships the visionOS build MCP server. Follow these steps to finish `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo build --release` within ~30 minutes on a fresh machine and call the visionOS tools (`inspect_xcode_schemes` / `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output`) from an MCP client.
 
 ## Prerequisites
 
@@ -52,6 +52,7 @@ cargo install seiro-mcp --locked
   [visionos]
   allowed_paths = []
   allowed_schemes = []
+  default_project_path = "/absolute/path/to/YourApp.xcodeproj"
   default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
   required_sdks = ["visionOS", "visionOS Simulator"]
   xcode_path = "/Applications/Xcode.app/Contents/Developer"
@@ -178,6 +179,18 @@ mcp call inspect_xcode_sdks '{
 - Use this when sandbox diagnostics and local shell results disagree.
 - Recommended troubleshooting order: `validate_sandbox_policy` diagnostics -> `inspect_xcode_sdks` -> retry validate/build.
 
+Optional scheme preflight:
+```bash
+mcp call inspect_xcode_schemes '{
+    "project_path": "/Users/<user>/codex/workspaces/VisionApp/VisionApp.xcodeproj",
+    "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+}'
+```
+- Use this when `project_path` or `scheme` is not known before build.
+- If `project_path` is omitted, resolution order is:
+  1. `.xcodeproj` discovered in current working directory
+  2. `visionos.default_project_path` from `config.toml`
+
 ### 3. Start a build with `build_visionos_app`
 
 ```bash
@@ -226,6 +239,9 @@ The skill still executes the same MCP tools in order:
 1. `validate_sandbox_policy`
 2. `build_visionos_app`
 3. `fetch_build_output`
+
+Optional preflight with skill:
+- If `project_path` or `scheme` is missing, call `inspect_xcode_schemes` first to resolve target project and scheme candidates.
 
 Contracts and payload schemas stay unchanged.
 
