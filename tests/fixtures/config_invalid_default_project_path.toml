@@ -3,12 +3,12 @@ host = "127.0.0.1"
 port = 8787
 
 [auth]
-token = "change-me-please"
+token = "valid-token-123456"
 
 [visionos]
-allowed_paths = []
-allowed_schemes = []
-default_project_path = "/absolute/path/to/YourApp.xcodeproj"
+allowed_paths = ["/Users/example/codex/workspaces"]
+allowed_schemes = ["VisionApp", "VisionToolbox"]
+default_project_path = "VisionApp.xcodeproj"
 default_destination = "platform=visionOS Simulator,name=Apple Vision Pro"
 required_sdks = ["visionOS", "visionOS Simulator"]
 xcode_path = "/Applications/Xcode.app/Contents/Developer"

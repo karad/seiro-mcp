@@ -17,6 +17,8 @@ use seiro_mcp::server::{
 };
 
 static SANDBOX_ENV_LOCK: Mutex<()> = Mutex::new(());
+static XCODEBUILD_ENV_LOCK: Mutex<()> = Mutex::new(());
+static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 #[tokio::test]
 async fn build_tool_returns_artifact_metadata() -> Result<()> {
@@ -618,6 +620,437 @@ async fn inspect_tool_reports_missing_required_sdk_in_env_mode() -> Result<()> {
 }
 
 #[tokio::test]
+async fn inspect_schemes_tool_returns_scheme_list() -> Result<()> {
+    let _guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "success");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_xcodeproj_path().to_string_lossy(),
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("inspect_xcode_schemes should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(response.get("status").and_then(Value::as_str), Some("ok"));
+    assert_eq!(
+        response.get("project_path_source").and_then(Value::as_str),
+        Some("request")
+    );
+    let schemes = response
+        .get("schemes")
+        .and_then(Value::as_array)
+        .expect("schemes should be an array");
+    assert!(
+        !schemes.is_empty(),
+        "inspect_xcode_schemes should return at least one scheme"
+    );
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_maps_xcodebuild_list_failed() -> Result<()> {
+    let _guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_xcodeproj_path().to_string_lossy(),
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("xcodebuild failure should return an error");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "xcodebuild_list_failed", "no_violation", true);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_uses_cwd_xcodeproj_when_project_path_is_omitted() -> Result<()> {
+    let _env_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _cwd_guard = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "success");
+
+    let workspace_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/visionos/workspace");
+    let _cwd = CwdGuard::change_to(&workspace_dir)?;
+
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("inspect_xcode_schemes should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(
+        response.get("project_path_source").and_then(Value::as_str),
+        Some("cwd")
+    );
+
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_uses_config_default_when_no_request_or_cwd_xcodeproj() -> Result<()> {
+    let _env_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _cwd_guard = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "success");
+
+    let empty_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join(format!("inspect-schemes-config-default-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&empty_dir)?;
+    let _cwd = CwdGuard::change_to(&empty_dir)?;
+
+    let mut config = test_server_config(20);
+    config.visionos.default_project_path = Some(allowed_project_xcodeproj_path());
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("inspect_xcode_schemes should succeed")
+        .structured_content
+        .expect("structured_content should exist");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    assert_eq!(
+        response.get("project_path_source").and_then(Value::as_str),
+        Some("config")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_returns_project_path_missing_when_no_request_cwd_or_config(
+) -> Result<()> {
+    let _cwd_guard = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+    enable_fast_timeout();
+
+    let empty_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join(format!("inspect-schemes-empty-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&empty_dir)?;
+    let _cwd = CwdGuard::change_to(&empty_dir)?;
+
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("missing project path should be rejected");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "project_path_missing", "no_violation", false);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_rejects_relative_project_path() -> Result<()> {
+    enable_fast_timeout();
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": "VisionApp.xcodeproj",
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("relative project_path should be rejected");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "project_path_invalid", "no_violation", false);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_rejects_nonexistent_project_path() -> Result<()> {
+    enable_fast_timeout();
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": "/tmp/does-not-exist/Nope.xcodeproj",
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = call_result.expect_err("nonexistent project_path should be rejected");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "project_not_found", "no_violation", false);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_maps_scheme_parse_failed() -> Result<()> {
+    let _env_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "parse_invalid");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_xcodeproj_path().to_string_lossy(),
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let error = call_result.expect_err("invalid JSON should map to scheme_parse_failed");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "scheme_parse_failed", "no_violation", true);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_schemes_tool_maps_no_schemes_found() -> Result<()> {
+    let _env_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "no_schemes");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_xcodeproj_path().to_string_lossy(),
+        "xcode_path": "/Applications/Xcode.app/Contents/Developer"
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let call_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_xcode_schemes".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let error = call_result.expect_err("no schemes should map to no_schemes_found");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "no_schemes_found", "no_violation", false);
+        }
+        other => panic!("Unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn inspect_tool_and_validate_share_required_sdk_view() -> Result<()> {
     let _guard = SANDBOX_ENV_LOCK
         .lock()
@@ -792,6 +1225,11 @@ fn allowed_project_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/visionos/workspace/VisionApp")
 }
 
+fn allowed_project_xcodeproj_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/visionos/workspace/VisionApp.xcodeproj")
+}
+
 fn test_server_config(max_build_minutes: u16) -> ServerConfig {
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/visionos/workspace");
@@ -806,6 +1244,7 @@ fn test_server_config(max_build_minutes: u16) -> ServerConfig {
         visionos: VisionOsConfig {
             allowed_paths: vec![workspace],
             allowed_schemes: vec!["VisionApp".into()],
+            default_project_path: None,
             default_destination: "platform=visionOS Simulator,name=Apple Vision Pro".into(),
             required_sdks: vec!["visionOS".into(), "visionOS Simulator".into()],
             xcode_path: PathBuf::from("/Applications/Xcode.app/Contents/Developer"),
@@ -876,4 +1315,22 @@ fn configure_sandbox_probe_env_with_sdks(sdks: &str) {
     env::set_var("VISIONOS_SANDBOX_DEVTOOLS", "enabled");
     env::set_var("VISIONOS_SANDBOX_LICENSE", "accepted");
     env::set_var("VISIONOS_SANDBOX_DISK_BYTES", "1099511627776");
+}
+
+struct CwdGuard {
+    original: PathBuf,
+}
+
+impl CwdGuard {
+    fn change_to(target: &PathBuf) -> Result<Self> {
+        let original = env::current_dir()?;
+        env::set_current_dir(target)?;
+        Ok(Self { original })
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        let _ = env::set_current_dir(&self.original);
+    }
 }

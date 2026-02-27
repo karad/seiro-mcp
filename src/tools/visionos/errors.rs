@@ -4,3 +4,4 @@ pub use crate::tools::visionos::build::{
     runtime_error_to_error_data, validation_error_to_error_data,
 };
 pub use crate::tools::visionos::sandbox::sandbox_error_to_error_data;
+pub use crate::tools::visionos::schemes::inspect_xcode_schemes;

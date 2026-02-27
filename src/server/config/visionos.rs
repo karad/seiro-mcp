@@ -16,6 +16,7 @@ pub const DEFAULT_XCODEBUILD_PATH: &str = "/usr/bin/xcodebuild";
 pub struct VisionOsConfig {
     pub allowed_paths: Vec<PathBuf>,
     pub allowed_schemes: Vec<String>,
+    pub default_project_path: Option<PathBuf>,
     pub default_destination: String,
     pub required_sdks: Vec<String>,
     pub xcode_path: PathBuf,
@@ -29,6 +30,7 @@ pub struct VisionOsConfig {
 pub struct RawVisionOsConfig {
     pub allowed_paths: Option<Vec<PathBuf>>,
     pub allowed_schemes: Option<Vec<String>>,
+    pub default_project_path: Option<PathBuf>,
     pub default_destination: Option<String>,
     pub required_sdks: Option<Vec<String>>,
     pub xcode_path: Option<PathBuf>,
@@ -62,6 +64,10 @@ pub fn parse_visionos_section(
             field: "visionos.allowed_schemes",
         })?;
     validate_allowed_schemes(path.as_path(), &allowed_schemes)?;
+
+    if let Some(default_project_path) = visionos_raw.default_project_path.as_deref() {
+        validate_default_project_path(path.as_path(), default_project_path)?;
+    }
 
     let default_destination = visionos_raw
         .default_destination
@@ -105,6 +111,7 @@ pub fn parse_visionos_section(
     Ok(VisionOsConfig {
         allowed_paths,
         allowed_schemes,
+        default_project_path: visionos_raw.default_project_path,
         default_destination,
         required_sdks,
         xcode_path,
@@ -150,6 +157,26 @@ fn validate_allowed_schemes(path: &Path, schemes: &[String]) -> Result<(), Confi
                 message: format!("Scheme length exceeds 128 characters: {scheme}"),
             });
         }
+    }
+    Ok(())
+}
+
+fn validate_default_project_path(path: &Path, project_path: &Path) -> Result<(), ConfigError> {
+    if project_path.as_os_str().is_empty() || !project_path.is_absolute() {
+        return Err(ConfigError::InvalidField {
+            path: path.to_path_buf(),
+            field: "visionos.default_project_path",
+            message: "Provide an absolute path to .xcodeproj or .xcworkspace".into(),
+        });
+    }
+
+    let ext = project_path.extension().and_then(|value| value.to_str());
+    if ext != Some("xcodeproj") && ext != Some("xcworkspace") {
+        return Err(ConfigError::InvalidField {
+            path: path.to_path_buf(),
+            field: "visionos.default_project_path",
+            message: "Use a .xcodeproj or .xcworkspace path".into(),
+        });
     }
     Ok(())
 }

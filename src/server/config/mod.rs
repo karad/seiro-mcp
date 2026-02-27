@@ -159,6 +159,12 @@ mod tests {
             vec![String::from("VisionApp"), String::from("VisionToolbox")]
         );
         assert_eq!(
+            config.visionos.default_project_path,
+            Some(PathBuf::from(
+                "/Users/example/codex/workspaces/VisionApp.xcodeproj"
+            ))
+        );
+        assert_eq!(
             config.visionos.default_destination,
             "platform=visionOS Simulator,name=Apple Vision Pro"
         );
@@ -282,5 +288,19 @@ mod tests {
 
         assert!(config.visionos.allowed_schemes.is_empty());
         assert!(!config.visionos.allowed_paths.is_empty());
+    }
+
+    #[test]
+    fn relative_default_project_path_returns_error() {
+        let error =
+            ServerConfig::load_from_path(fixture_path("config_invalid_default_project_path.toml"))
+                .expect_err("should error on relative default_project_path");
+
+        match error {
+            ConfigError::InvalidField { field, .. } => {
+                assert_eq!(field, "visionos.default_project_path")
+            }
+            other => panic!("Unexpected error: {other:?}", other = other),
+        }
     }
 }

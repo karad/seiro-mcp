@@ -7,6 +7,7 @@ pub mod build;
 pub mod errors;
 pub mod registry;
 pub mod sandbox;
+pub mod schemes;
 
 pub use artifacts::{
     fetch_build_output, fetch_error_to_error_data, FetchBuildOutputRequest,
@@ -28,3 +29,4 @@ pub use sandbox::{
     inspect_xcode_sdks, sandbox_error_to_error_data, validate_sandbox_policy,
     InspectXcodeSdksRequest, InspectXcodeSdksResponse, SandboxPolicyRequest, SandboxPolicyResponse,
 };
+pub use schemes::{inspect_xcode_schemes, InspectXcodeSchemesRequest, InspectXcodeSchemesResponse};
