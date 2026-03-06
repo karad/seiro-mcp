@@ -1,0 +1,48 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+a {
+    text-decoration: underline;
+}
+
+a:link {
+    color: #ce5739;
+}
+
+a:visited {
+    color: #a85a47;
+}
+a:active {
+    color: #9f3f28;
+}
+a:hover {
+    color: #b94a30;
+}
+
+.wrapper {
+    width: 1180px;
+}
+
+header {
+    width: 270px;
+}
+
+section {
+    width: 700px;
+}
+
+@media print, screen and (max-width: 1280px) {
+    div.wrapper {
+        width: auto;
+    }
+}
+
+@media print, screen and (max-width: 1280px) {
+    header, section, footer {
+        float: none;
+        position: static;
+        width: auto;
+    }
+}
