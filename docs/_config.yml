@@ -1,4 +1,5 @@
 theme: jekyll-theme-minimal
+logo: /assets/seiro-mcp-logo.png
 title: Seiro MCP Docs
 description: Seiro MCP server and visionOS tools
 header_pages:
