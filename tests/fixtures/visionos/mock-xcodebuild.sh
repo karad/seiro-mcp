@@ -51,6 +51,26 @@ case "${MOCK_XCODEBUILD_BEHAVIOR:-success}" in
     # Simulate a long-running build that should hit the MCP timeout quickly.
     sleep 2
     ;;
+  ambiguous_destination)
+    cat >&2 <<'EOF'
+Command line invocation:
+ /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme VisionApp -configuration Debug -destination "platform=visionOS Simulator,name=Apple Vision Pro" build
+
+xcodebuild: error: Unable to find a device matching the provided destination specifier:
+		{ platform:visionOS Simulator, OS:latest, name:Apple Vision Pro }
+
+	The requested device could not be found because multiple devices matched the request. (
+ "<DVTiPhoneSimulator: 0xb57503480> {\n\t\tSimDevice: Apple Vision Pro (5BB47C97-BDBA-4DA7-BE30-F659C265F896, visionOS 2.5, Shutdown)\n}",
+ "<DVTiPhoneSimulator: 0xb57503980> {\n\t\tSimDevice: Apple Vision Pro (F556D53F-412A-4778-AF81-3449D52F5A7F, visionOS 26.2, Shutdown)\n}"
+)
+
+	Available destinations for the "VisionApp" scheme:
+		{ platform:visionOS, id:dvtdevice-DVTiOSDevicePlaceholder-xros:placeholder, name:Any visionOS Device }
+		{ platform:visionOS Simulator, id:dvtdevice-DVTiOSDeviceSimulatorPlaceholder-xrsimulator:placeholder, name:Any visionOS Simulator Device }
+		{ platform:visionOS Simulator, arch:arm64, id:F556D53F-412A-4778-AF81-3449D52F5A7F, OS:26.2, name:Apple Vision Pro }
+EOF
+    exit 70
+    ;;
   fail)
     echo "[mock-xcodebuild] simulated failure" >&2
     exit 65

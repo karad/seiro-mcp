@@ -18,6 +18,7 @@ use seiro_mcp::server::{
 
 static SANDBOX_ENV_LOCK: Mutex<()> = Mutex::new(());
 static XCODEBUILD_ENV_LOCK: Mutex<()> = Mutex::new(());
+static DIAGNOSTICS_ENV_LOCK: Mutex<()> = Mutex::new(());
 static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 #[tokio::test]
@@ -359,6 +360,736 @@ async fn fetch_tool_rejects_unknown_job() -> Result<()> {
     match error {
         ServiceError::McpError(inner) => {
             assert_error_metadata(&inner, "job_not_found", "no_violation", false);
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_returns_typecheck_location_for_failed_job() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    env::set_var("MOCK_DIAGNOSTICS_BEHAVIOR", "typecheck_error");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let build_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "fail"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let build_result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(build_args),
+        })
+        .await;
+
+    let job_id = match build_result.expect_err("build should fail") {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "build_failed", "no_violation", true);
+            assert_eq!(
+                error_field(&inner, "details")
+                    .and_then(Value::as_object)
+                    .and_then(|details| details.get("diagnostics_hint"))
+                    .and_then(Value::as_str),
+                Some("inspect_build_diagnostics")
+            );
+            error_field(&inner, "job_id")
+                .and_then(Value::as_str)
+                .expect("job_id should exist")
+                .to_string()
+        }
+        other => panic!("unexpected build error: {other:?}", other = other),
+    };
+
+    let inspect_args = json!({
+        "job_id": job_id,
+        "include_log_excerpt": true,
+        "prefer_typecheck": true
+    })
+    .as_object()
+    .expect("object")
+    .clone();
+
+    let inspect_payload = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await
+        .expect("inspect_build_diagnostics should succeed")
+        .structured_content
+        .expect("structured content");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    env::remove_var("MOCK_DIAGNOSTICS_BEHAVIOR");
+
+    assert_eq!(
+        inspect_payload.get("availability").and_then(Value::as_str),
+        Some("available")
+    );
+    assert_eq!(
+        inspect_payload
+            .get("failure_summary")
+            .and_then(Value::as_object)
+            .and_then(|summary| summary.get("source"))
+            .and_then(Value::as_str),
+        Some("typecheck")
+    );
+    assert_eq!(
+        inspect_payload
+            .get("primary_location")
+            .and_then(Value::as_object)
+            .and_then(|location| location.get("line"))
+            .and_then(Value::as_u64),
+        Some(105)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_falls_back_when_typecheck_unavailable() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    env::set_var("MOCK_DIAGNOSTICS_BEHAVIOR", "typecheck_unavailable");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let build_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "fail"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+
+    let build_result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(build_args),
+        })
+        .await;
+    let job_id = match build_result.expect_err("build should fail") {
+        ServiceError::McpError(inner) => error_field(&inner, "job_id")
+            .and_then(Value::as_str)
+            .expect("job_id")
+            .to_string(),
+        other => panic!("unexpected build error: {other:?}", other = other),
+    };
+
+    let inspect_args = json!({
+        "job_id": job_id,
+        "include_log_excerpt": true,
+        "prefer_typecheck": true
+    })
+    .as_object()
+    .expect("object")
+    .clone();
+    let inspect_payload = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await
+        .expect("inspect_build_diagnostics should succeed")
+        .structured_content
+        .expect("structured content");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    env::remove_var("MOCK_DIAGNOSTICS_BEHAVIOR");
+
+    assert_eq!(
+        inspect_payload.get("availability").and_then(Value::as_str),
+        Some("unavailable")
+    );
+    assert_eq!(
+        inspect_payload
+            .get("failure_summary")
+            .and_then(Value::as_object)
+            .and_then(|summary| summary.get("source"))
+            .and_then(Value::as_str),
+        Some("xcodebuild_log")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_rejects_invalid_job_id() -> Result<()> {
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let inspect_args = json!({
+        "job_id": "invalid",
+        "include_log_excerpt": true
+    })
+    .as_object()
+    .expect("object")
+    .clone();
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = result.expect_err("invalid job id should fail");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "invalid_job_id", "no_violation", false)
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_rejects_unknown_job() -> Result<()> {
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let inspect_args = json!({ "job_id": Uuid::new_v4().to_string() })
+        .as_object()
+        .expect("object")
+        .clone();
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    let error = result.expect_err("unknown job should fail");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "job_not_found", "no_violation", false)
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_reports_expired_context() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    env::set_var("MOCK_DIAGNOSTICS_BEHAVIOR", "typecheck_error");
+    let config = test_server_config_with_ttl(20, 1);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let build_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "fail"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let build_result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(build_args),
+        })
+        .await;
+    let job_id = match build_result.expect_err("build should fail") {
+        ServiceError::McpError(inner) => error_field(&inner, "job_id")
+            .and_then(Value::as_str)
+            .expect("job_id")
+            .to_string(),
+        other => panic!("unexpected build error: {other:?}", other = other),
+    };
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    let inspect_args = json!({ "job_id": job_id })
+        .as_object()
+        .expect("object")
+        .clone();
+    let inspect_result = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    env::remove_var("MOCK_DIAGNOSTICS_BEHAVIOR");
+
+    let error = inspect_result.expect_err("expired diagnostics should fail");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "diagnostics_expired", "no_violation", true);
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inspect_build_diagnostics_is_repeatable_for_same_job_id() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    let _diagnostics_guard = DIAGNOSTICS_ENV_LOCK
+        .lock()
+        .expect("diagnostics env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    env::set_var("MOCK_DIAGNOSTICS_BEHAVIOR", "typecheck_error");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let build_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "fail"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let build_result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(build_args),
+        })
+        .await;
+    let job_id = match build_result.expect_err("build should fail") {
+        ServiceError::McpError(inner) => error_field(&inner, "job_id")
+            .and_then(Value::as_str)
+            .expect("job_id")
+            .to_string(),
+        other => panic!("unexpected build error: {other:?}", other = other),
+    };
+
+    let inspect_args = json!({
+        "job_id": job_id,
+        "include_log_excerpt": true,
+        "prefer_typecheck": true
+    })
+    .as_object()
+    .expect("object")
+    .clone();
+
+    let first = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args.clone()),
+        })
+        .await
+        .expect("first inspect should succeed")
+        .structured_content
+        .expect("structured content");
+    let second = client
+        .call_tool(CallToolRequestParam {
+            name: "inspect_build_diagnostics".into(),
+            arguments: Some(inspect_args),
+        })
+        .await
+        .expect("second inspect should succeed")
+        .structured_content
+        .expect("structured content");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+    env::remove_var("MOCK_DIAGNOSTICS_BEHAVIOR");
+
+    assert_eq!(
+        first.get("availability").and_then(Value::as_str),
+        Some("available")
+    );
+    assert_eq!(
+        first.get("failure_summary").and_then(Value::as_object),
+        second.get("failure_summary").and_then(Value::as_object)
+    );
+    assert_eq!(
+        first.get("primary_location").and_then(Value::as_object),
+        second.get("primary_location").and_then(Value::as_object)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn build_success_response_contract_remains_stable() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "success");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "success"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let response = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(args),
+        })
+        .await
+        .expect("build should succeed")
+        .structured_content
+        .expect("structured_content");
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let required = [
+        "job_id",
+        "status",
+        "artifact_path",
+        "artifact_sha256",
+        "log_excerpt",
+        "duration_ms",
+    ];
+    for key in required {
+        assert!(
+            response.get(key).is_some(),
+            "missing build response key: {key}"
+        );
+    }
+    assert!(
+        response.get("diagnostics_hint").is_none(),
+        "success response must not include diagnostics-specific fields"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn fetch_response_contract_remains_stable_for_success_and_failure() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "success");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let build_args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "success"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let build = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(build_args),
+        })
+        .await
+        .expect("build should succeed")
+        .structured_content
+        .expect("structured content");
+    let job_id = build
+        .get("job_id")
+        .and_then(Value::as_str)
+        .expect("job_id")
+        .to_string();
+
+    let fetch_success_args = json!({ "job_id": job_id, "include_logs": true })
+        .as_object()
+        .expect("object")
+        .clone();
+    let fetch_success = client
+        .call_tool(CallToolRequestParam {
+            name: "fetch_build_output".into(),
+            arguments: Some(fetch_success_args),
+        })
+        .await
+        .expect("fetch success")
+        .structured_content
+        .expect("structured content");
+
+    let required = [
+        "job_id",
+        "status",
+        "artifact_zip",
+        "sha256",
+        "download_ttl_seconds",
+        "log_excerpt",
+    ];
+    for key in required {
+        assert!(
+            fetch_success.get(key).is_some(),
+            "missing fetch success key: {key}"
+        );
+    }
+
+    let fetch_fail_args = json!({ "job_id": Uuid::new_v4().to_string() })
+        .as_object()
+        .expect("object")
+        .clone();
+    let fetch_fail = client
+        .call_tool(CallToolRequestParam {
+            name: "fetch_build_output".into(),
+            arguments: Some(fetch_fail_args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let error = fetch_fail.expect_err("fetch should fail for unknown job");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "job_not_found", "no_violation", false);
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn build_failure_error_keeps_existing_fields_with_additive_hint() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "fail");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "fail"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let error = result.expect_err("build should fail");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "build_failed", "no_violation", true);
+            assert!(error_field(&inner, "job_id").is_some(), "job_id must exist");
+            assert!(
+                error_field(&inner, "details")
+                    .and_then(Value::as_object)
+                    .and_then(|details| details.get("details"))
+                    .and_then(Value::as_str)
+                    .is_some(),
+                "existing details field must exist"
+            );
+            assert_eq!(
+                error_field(&inner, "details")
+                    .and_then(Value::as_object)
+                    .and_then(|details| details.get("diagnostics_hint"))
+                    .and_then(Value::as_str),
+                Some("inspect_build_diagnostics")
+            );
+        }
+        other => panic!("unexpected error: {other:?}", other = other),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn ambiguous_destination_returns_structured_retry_guidance() -> Result<()> {
+    let _xcodebuild_guard = XCODEBUILD_ENV_LOCK
+        .lock()
+        .expect("xcodebuild env lock should not be poisoned");
+    enable_fast_timeout();
+    env::set_var("MOCK_XCODEBUILD_BEHAVIOR", "ambiguous_destination");
+    let config = test_server_config(20);
+    let server = build_server(config);
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+    let server_task = tokio::spawn(async move {
+        server.serve(server_transport).await?.waiting().await?;
+        Result::<_, anyhow::Error>::Ok(())
+    });
+    let client = serve_client(ClientInfo::default(), client_transport).await?;
+
+    let args = json!({
+        "project_path": allowed_project_path().to_string_lossy(),
+        "scheme": "VisionApp",
+        "destination": "platform=visionOS Simulator,name=Apple Vision Pro",
+        "env_overrides": {
+            "MOCK_XCODEBUILD_BEHAVIOR": "ambiguous_destination"
+        }
+    })
+    .as_object()
+    .expect("JSON object")
+    .clone();
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: "build_visionos_app".into(),
+            arguments: Some(args),
+        })
+        .await;
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    env::remove_var("MOCK_XCODEBUILD_BEHAVIOR");
+
+    let error = result.expect_err("build should fail");
+    match error {
+        ServiceError::McpError(inner) => {
+            assert_error_metadata(&inner, "destination_ambiguous", "no_violation", true);
+            assert_eq!(
+                error_field(&inner, "details")
+                    .and_then(Value::as_object)
+                    .and_then(|details| details.get("suggested_destination"))
+                    .and_then(Value::as_str),
+                Some("platform=visionOS Simulator,id:F556D53F-412A-4778-AF81-3449D52F5A7F")
+            );
+            assert_eq!(
+                error_field(&inner, "details")
+                    .and_then(Value::as_object)
+                    .and_then(|details| details.get("matched_devices"))
+                    .and_then(Value::as_array)
+                    .map(Vec::len),
+                Some(2)
+            );
         }
         other => panic!("unexpected error: {other:?}", other = other),
     }

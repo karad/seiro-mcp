@@ -14,10 +14,12 @@ use crate::{
     tools::{
         self,
         visionos::{
-            self, BuildVisionOsAppResponse, FetchBuildOutputRequest, FetchBuildOutputResponse,
-            InspectXcodeSchemesRequest, InspectXcodeSchemesResponse, InspectXcodeSdksRequest,
-            InspectXcodeSdksResponse, SandboxPolicyRequest, SandboxPolicyResponse,
-            VisionOsArtifactStore, VisionOsBuildRequest, VisionOsJobQueue,
+            self, BuildFailureContext, BuildVisionOsAppResponse, FetchBuildOutputRequest,
+            FetchBuildOutputResponse, InspectBuildDiagnosticsRequest,
+            InspectBuildDiagnosticsResponse, InspectXcodeSchemesRequest,
+            InspectXcodeSchemesResponse, InspectXcodeSdksRequest, InspectXcodeSdksResponse,
+            SandboxPolicyRequest, SandboxPolicyResponse, VisionOsArtifactStore,
+            VisionOsBuildRequest, VisionOsJobQueue,
         },
         ServerToolRouter,
     },
@@ -55,14 +57,34 @@ impl VisionOsServer {
         self.visionos_queue.pending_jobs().await
     }
 
-    async fn record_build_failure(&self, job_id: Uuid, err: &VisionOsBuildError) {
+    async fn record_build_failure(
+        &self,
+        job_id: Uuid,
+        err: &VisionOsBuildError,
+        request: &VisionOsBuildRequest,
+    ) {
         let log_excerpt = match err {
             VisionOsBuildError::CommandFailed { message, .. } => message.clone(),
             _ => err.to_string(),
         };
+        let effective_xcode_path = request
+            .env_overrides
+            .get("DEVELOPER_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.config.visionos.xcode_path.clone());
+        let failure_context = Some(BuildFailureContext {
+            project_path: request.project_path.clone(),
+            workspace: request.workspace.clone(),
+            scheme: request.scheme.clone(),
+            configuration: request.configuration.as_str().to_string(),
+            destination: request.destination.clone(),
+            xcode_path: effective_xcode_path,
+            env_overrides: request.env_overrides.clone(),
+            extra_args: request.extra_args.clone(),
+        });
         if let Err(store_err) = self
             .artifact_store
-            .record_failure(job_id, log_excerpt, Utc::now())
+            .record_failure(job_id, log_excerpt, failure_context, Utc::now())
             .await
         {
             tracing::warn!(
@@ -119,7 +141,7 @@ impl VisionOsServer {
                 Ok(Json(resp))
             }
             Err(err) => {
-                self.record_build_failure(job_id, &err).await;
+                self.record_build_failure(job_id, &err, &request).await;
                 Err(visionos::runtime_error_to_error_data(err, job_id))
             }
         }
@@ -178,6 +200,19 @@ impl VisionOsServer {
             Ok(response) => Ok(Json(response)),
             Err(err) => Err(visionos::fetch_error_to_error_data(err)),
         }
+    }
+
+    #[tool(
+        name = "inspect_build_diagnostics",
+        description = "Inspect detailed diagnostics for a failed visionOS build job"
+    )]
+    async fn inspect_build_diagnostics(
+        &self,
+        Parameters(request): Parameters<InspectBuildDiagnosticsRequest>,
+    ) -> Result<Json<InspectBuildDiagnosticsResponse>, ErrorData> {
+        visionos::inspect_build_diagnostics(&self.artifact_store, request)
+            .await
+            .map(Json)
     }
 }
 
