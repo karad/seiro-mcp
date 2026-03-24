@@ -32,8 +32,10 @@ pub const ALLOWED_ENV_OVERRIDES: &[&str] = &[
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum BuildConfiguration {
+    #[serde(alias = "Debug")]
     #[default]
     Debug,
+    #[serde(alias = "Release")]
     Release,
 }
 
@@ -206,6 +208,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::server::config::VisionOsConfig;
+    use serde_json::json;
 
     use super::*;
 
@@ -241,6 +244,39 @@ mod tests {
             extra_args: vec![],
             env_overrides: std::collections::BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn build_configuration_accepts_lowercase_values() {
+        let parsed: VisionOsBuildRequest = serde_json::from_value(json!({
+            "project_path": absolute_fixtures_path("tests/fixtures/visionos/workspace/VisionApp"),
+            "scheme": "VisionApp",
+            "configuration": "debug"
+        }))
+        .expect("lowercase configuration should deserialize");
+
+        assert_eq!(parsed.configuration, BuildConfiguration::Debug);
+    }
+
+    #[test]
+    fn build_configuration_accepts_xcode_style_values() {
+        let parsed: VisionOsBuildRequest = serde_json::from_value(json!({
+            "project_path": absolute_fixtures_path("tests/fixtures/visionos/workspace/VisionApp"),
+            "scheme": "VisionApp",
+            "configuration": "Debug"
+        }))
+        .expect("xcode-style configuration should deserialize");
+
+        assert_eq!(parsed.configuration, BuildConfiguration::Debug);
+    }
+
+    #[test]
+    fn build_configuration_serializes_to_lowercase() {
+        let request = base_request();
+
+        let serialized = serde_json::to_value(&request).expect("request should serialize");
+
+        assert_eq!(serialized.get("configuration"), Some(&json!("debug")));
     }
 
     #[test]

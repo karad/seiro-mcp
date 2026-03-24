@@ -4,19 +4,24 @@
 
 pub mod artifacts;
 pub mod build;
+pub mod diagnostics;
 pub mod errors;
 pub mod registry;
 pub mod sandbox;
 pub mod schemes;
 
 pub use artifacts::{
-    fetch_build_output, fetch_error_to_error_data, FetchBuildOutputRequest,
+    fetch_build_output, fetch_error_to_error_data, BuildFailureContext, FetchBuildOutputRequest,
     FetchBuildOutputResponse, VisionOsArtifactStore,
 };
 pub use build::{
     run_build, runtime_error_to_error_data, validation_error_to_error_data,
     BuildRequestValidationError, BuildVisionOsAppResponse, VisionOsBuildRequest, VisionOsJobQueue,
     BUILD_TOOL_ID,
+};
+pub use diagnostics::{
+    inspect_build_diagnostics, BuildFailureSummary, FailureLocation,
+    InspectBuildDiagnosticsRequest, InspectBuildDiagnosticsResponse,
 };
 pub use errors::{
     fetch_error_to_error_data as visionos_fetch_error,

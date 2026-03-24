@@ -6,7 +6,7 @@ lang: en
 
 # Quickstart
 
-This repository ships the visionOS build MCP server. Follow these steps to finish `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo build --release` within ~30 minutes on a fresh machine and call the visionOS tools (`inspect_xcode_schemes` / `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output`) from an MCP client.
+This repository ships the visionOS build MCP server. Follow these steps to finish `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo build --release` within ~30 minutes on a fresh machine and call the visionOS tools (`inspect_xcode_schemes` / `validate_sandbox_policy` / `inspect_build_diagnostics` / `build_visionos_app` / `fetch_build_output`) from an MCP client.
 
 ## Prerequisites
 
@@ -205,9 +205,22 @@ mcp call build_visionos_app '{
 ```
 - `project_path` / `workspace` must be absolute paths within `visionos.allowed_paths`.
 - `scheme` must be listed in `visionos.allowed_schemes`.
+- `configuration` should use lowercase canonical values: `debug` or `release`. For compatibility, `Debug` / `Release` are also accepted.
 - Allowed `extra_args`: `-quiet`, `-UseModernBuildSystem=YES`, `-skipPackagePluginValidation`, `-allowProvisioningUpdates`.
 - `MOCK_XCODEBUILD_BEHAVIOR` switches the test fixture (`tests/fixtures/visionos/mock-xcodebuild.sh`) among `success` / `fail` / `timeout`.
 - On success, returns `job_id`, `artifact_path`, `artifact_sha256`, `log_excerpt`, `duration_ms`; on failure, returns errors such as `build_failed` or `timeout`.
+- If multiple simulators match the destination name, `build_visionos_app` returns `destination_ambiguous` with `matched_devices`, `available_destinations`, and a retry-ready `suggested_destination`.
+
+If build fails and returns `job_id`, inspect diagnostics without running shell commands manually:
+```bash
+mcp call inspect_build_diagnostics '{
+    "job_id": "<UUID returned in build error context>",
+    "include_log_excerpt": true,
+    "prefer_typecheck": true
+}'
+```
+- `availability: "available"` includes `primary_location` (`file`, `line`, `column`) from typecheck diagnostics.
+- `availability: "unavailable"` falls back to `xcodebuild_log` summary with notes.
 
 ### 4. Download artifacts with `fetch_build_output`
 
@@ -220,28 +233,32 @@ mcp call fetch_build_output '{
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
-## Skill-assisted flow (explicit invocation only)
+## Skill-assisted flow (Seiro MCP preferred for Xcode / visionOS)
 
 You can run the same build flow with the bundled skill:
 
 - Skill file: `skills/seiro-mcp-visionos-build-operator/SKILL.md`
-- Activation policy: explicit invocation only (no auto-suggestion, no auto-apply in v1)
+- Preferred policy: use this skill for Xcode / visionOS project workflows so the agent reaches for Seiro MCP before direct `xcodebuild` / `swiftc`
 
 When to choose which mode:
 - MCP-only: best for direct scripting and explicit tool calls.
 - Skill-assisted: best when you want a standardized operational sequence and error handling guidance.
 
-How to invoke explicitly:
+Prompt examples:
 - `Use seiro-mcp-visionos-build-operator for this task.`
 - `Run this via the seiro-mcp-visionos-build-operator skill.`
+- `Use Seiro MCP for this Xcode project instead of direct xcodebuild.`
 
 The skill still executes the same MCP tools in order:
-1. `validate_sandbox_policy`
-2. `build_visionos_app`
-3. `fetch_build_output`
+1. `inspect_xcode_schemes` (when project or scheme discovery is needed)
+2. `validate_sandbox_policy`
+3. `build_visionos_app`
+4. `inspect_build_diagnostics` (on failure)
+5. `fetch_build_output` (on success)
 
 Optional preflight with skill:
 - If `project_path` or `scheme` is missing, call `inspect_xcode_schemes` first to resolve target project and scheme candidates.
+- If you inspect the working directory manually first, treat `.xcodeproj` / `.xcworkspace` as directory packages. File-only searches can miss them.
 
 Contracts and payload schemas stay unchanged.
 

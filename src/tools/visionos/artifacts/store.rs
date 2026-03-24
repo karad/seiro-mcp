@@ -23,6 +23,19 @@ pub enum BuildJobStatus {
     Failed,
 }
 
+/// Build context captured on failures to enable deterministic diagnostics.
+#[derive(Debug, Clone)]
+pub struct BuildFailureContext {
+    pub project_path: PathBuf,
+    pub workspace: Option<PathBuf>,
+    pub scheme: String,
+    pub configuration: String,
+    pub destination: String,
+    pub xcode_path: PathBuf,
+    pub env_overrides: std::collections::BTreeMap<String, String>,
+    pub extra_args: Vec<String>,
+}
+
 /// Record of a build job.
 #[derive(Debug, Clone)]
 pub struct BuildJobRecord {
@@ -32,6 +45,7 @@ pub struct BuildJobRecord {
     pub artifact_sha256: Option<String>,
     pub log_excerpt: String,
     pub finished_at: DateTime<Utc>,
+    pub failure_context: Option<BuildFailureContext>,
 }
 
 /// Store that persists visionOS artifacts and enforces TTL.
@@ -101,6 +115,7 @@ impl VisionOsArtifactStore {
                 artifact_sha256: Some(artifact_sha256),
                 log_excerpt,
                 finished_at,
+                failure_context: None,
             },
         );
         Ok(())
@@ -111,6 +126,7 @@ impl VisionOsArtifactStore {
         &self,
         job_id: Uuid,
         log_excerpt: String,
+        failure_context: Option<BuildFailureContext>,
         finished_at: DateTime<Utc>,
     ) -> Result<(), ArtifactError> {
         self.maybe_cleanup(finished_at).await;
@@ -124,6 +140,7 @@ impl VisionOsArtifactStore {
                 artifact_sha256: None,
                 log_excerpt,
                 finished_at,
+                failure_context,
             },
         );
         Ok(())

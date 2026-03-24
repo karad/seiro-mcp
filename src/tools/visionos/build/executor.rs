@@ -47,6 +47,11 @@ const BUILD_FAILED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "xcodebuild exited with an error",
     "Review the log excerpt and fix the failing targets.",
 );
+const DESTINATION_AMBIGUOUS_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
+    "destination_ambiguous",
+    "The requested simulator destination matched multiple devices",
+    "Retry build_visionos_app with an id-based destination such as `platform=visionOS Simulator,id:<device-id>`.",
+);
 const SANDBOX_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "sandbox_violation_blocked",
     "Build was blocked by the sandbox policy",
@@ -207,14 +212,169 @@ pub fn runtime_error_to_error_data(err: VisionOsBuildError, job_id: Uuid) -> Err
             false,
             job_id,
         ),
+        VisionOsBuildError::CommandFailed { exit_code, message } => {
+            if let Some(details) = parse_ambiguous_destination_details(&message) {
+                return build_error_data_with_job(
+                    &DESTINATION_AMBIGUOUS_ERROR,
+                    json!({
+                        "details": message,
+                        "exit_code": exit_code,
+                        "matched_devices": details.matched_devices,
+                        "available_destinations": details.available_destinations,
+                        "suggested_destination": details.suggested_destination
+                    }),
+                    SandboxState::NoViolation,
+                    true,
+                    job_id,
+                );
+            }
+
+            build_error_data_with_job(
+                &BUILD_FAILED_ERROR,
+                json!({
+                    "details": message,
+                    "diagnostics_hint": "inspect_build_diagnostics"
+                }),
+                SandboxState::NoViolation,
+                true,
+                job_id,
+            )
+        }
         _ => build_error_data_with_job(
             &BUILD_FAILED_ERROR,
-            json!({ "details": err.to_string() }),
+            json!({
+                "details": err.to_string(),
+                "diagnostics_hint": "inspect_build_diagnostics"
+            }),
             SandboxState::NoViolation,
             true,
             job_id,
         ),
     }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct AmbiguousDestinationDetails {
+    matched_devices: Vec<MatchedDevice>,
+    available_destinations: Vec<AvailableDestination>,
+    suggested_destination: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct MatchedDevice {
+    name: String,
+    id: String,
+    os: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct AvailableDestination {
+    platform: String,
+    id: String,
+    name: String,
+    os: Option<String>,
+    arch: Option<String>,
+}
+
+fn parse_ambiguous_destination_details(message: &str) -> Option<AmbiguousDestinationDetails> {
+    if !message.contains("multiple devices matched the request") {
+        return None;
+    }
+
+    let matched_devices = parse_matched_devices(message);
+    let available_destinations = parse_available_destinations(message);
+    let suggested_destination = available_destinations
+        .iter()
+        .find(|destination| {
+            destination.platform == "visionOS Simulator"
+                && !destination.id.contains("placeholder")
+                && destination.id.len() >= 8
+        })
+        .map(|destination| format!("platform=visionOS Simulator,id:{}", destination.id));
+
+    Some(AmbiguousDestinationDetails {
+        matched_devices,
+        available_destinations,
+        suggested_destination,
+    })
+}
+
+fn parse_matched_devices(message: &str) -> Vec<MatchedDevice> {
+    message
+        .lines()
+        .filter_map(|line| {
+            let marker = "SimDevice: ";
+            let start = line.find(marker)?;
+            let tail = &line[start + marker.len()..];
+            let open_paren = tail.find(" (")?;
+            let name = tail[..open_paren].trim().to_string();
+            let inner = tail[open_paren + 2..].split(')').next()?.trim();
+            let mut parts = inner.split(',').map(str::trim);
+            let id = parts.next()?.to_string();
+            let os = parts.next()?.to_string();
+            Some(MatchedDevice { name, id, os })
+        })
+        .collect()
+}
+
+fn parse_available_destinations(message: &str) -> Vec<AvailableDestination> {
+    let mut destinations = Vec::new();
+    let mut in_section = false;
+
+    for line in message.lines() {
+        if line.contains("Available destinations for the") {
+            in_section = true;
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+
+        let trimmed = line.trim();
+        if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+            if !trimmed.is_empty() {
+                break;
+            }
+            continue;
+        }
+
+        let mut platform = None;
+        let mut id = None;
+        let mut name = None;
+        let mut os = None;
+        let mut arch = None;
+
+        for field in trimmed
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .split(',')
+            .map(str::trim)
+        {
+            if let Some((key, value)) = field.split_once(':') {
+                let value = value.trim().to_string();
+                match key.trim() {
+                    "platform" => platform = Some(value),
+                    "id" => id = Some(value),
+                    "name" => name = Some(value),
+                    "OS" => os = Some(value),
+                    "arch" => arch = Some(value),
+                    _ => {}
+                }
+            }
+        }
+
+        if let (Some(platform), Some(id), Some(name)) = (platform, id, name) {
+            destinations.push(AvailableDestination {
+                platform,
+                id,
+                name,
+                os,
+                arch,
+            });
+        }
+    }
+
+    destinations
 }
 
 fn build_error_data(
@@ -324,6 +484,47 @@ mod tests {
             Some("no_violation")
         );
         assert_eq!(data.get("retryable").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn runtime_ambiguous_destination_maps_to_structured_error() {
+        let job_id = Uuid::new_v4();
+        let err = VisionOsBuildError::CommandFailed {
+            exit_code: Some(70),
+            message: r#"xcodebuild: error: Unable to find a device matching the provided destination specifier:
+        { platform:visionOS Simulator, OS:latest, name:Apple Vision Pro }
+
+    The requested device could not be found because multiple devices matched the request. (
+ "<DVTiPhoneSimulator: 0xb57503480> {\n\t\tSimDevice: Apple Vision Pro (5BB47C97-BDBA-4DA7-BE30-F659C265F896, visionOS 2.5, Shutdown)\n}",
+ "<DVTiPhoneSimulator: 0xb57503980> {\n\t\tSimDevice: Apple Vision Pro (F556D53F-412A-4778-AF81-3449D52F5A7F, visionOS 26.2, Shutdown)\n}"
+)
+
+    Available destinations for the "HelloSkills" scheme:
+        { platform:visionOS, id:dvtdevice-DVTiOSDevicePlaceholder-xros:placeholder, name:Any visionOS Device }
+        { platform:visionOS Simulator, id:dvtdevice-DVTiOSDeviceSimulatorPlaceholder-xrsimulator:placeholder, name:Any visionOS Simulator Device }
+        { platform:visionOS Simulator, arch:arm64, id:F556D53F-412A-4778-AF81-3449D52F5A7F, OS:26.2, name:Apple Vision Pro }"#.into(),
+        };
+
+        let data = extract_data(&runtime_error_to_error_data(err, job_id));
+        assert_eq!(
+            data.get("code").and_then(Value::as_str),
+            Some("destination_ambiguous")
+        );
+        assert_eq!(
+            data.get("details")
+                .and_then(Value::as_object)
+                .and_then(|details| details.get("suggested_destination"))
+                .and_then(Value::as_str),
+            Some("platform=visionOS Simulator,id:F556D53F-412A-4778-AF81-3449D52F5A7F")
+        );
+        assert_eq!(
+            data.get("details")
+                .and_then(Value::as_object)
+                .and_then(|details| details.get("matched_devices"))
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
     }
 
     #[test]

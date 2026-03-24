@@ -248,9 +248,23 @@ mcp call build_visionos_app '{
 ```
 - `project_path` / `workspace` must be absolute paths within `visionos.allowed_paths`.
 - `scheme` must be listed in `visionos.allowed_schemes`.
+- `configuration` should use lowercase canonical values: `debug` or `release`. For compatibility, `Debug` / `Release` are also accepted.
 - Allowed `extra_args`: `-quiet`, `-UseModernBuildSystem=YES`, `-skipPackagePluginValidation`, `-allowProvisioningUpdates`.
 - `MOCK_XCODEBUILD_BEHAVIOR` switches the test fixture (`tests/fixtures/visionos/mock-xcodebuild.sh`) among `success` / `fail` / `timeout`.
 - On success, returns `job_id`, `artifact_path`, `artifact_sha256`, `log_excerpt`, `duration_ms`; on failure, returns errors such as `build_failed` or `timeout`.
+- If multiple simulators match the destination name, `build_visionos_app` returns `destination_ambiguous` with `matched_devices`, `available_destinations`, and a retry-ready `suggested_destination`.
+
+If a build fails, inspect diagnostics without running manual shell commands:
+
+```bash
+mcp call inspect_build_diagnostics '{
+    "job_id": "<UUID returned in build error context>",
+    "include_log_excerpt": true,
+    "prefer_typecheck": true
+}'
+```
+- `availability: "available"` returns `primary_location` (`file`, `line`, `column`) from typecheck diagnostics.
+- `availability: "unavailable"` falls back to an `xcodebuild_log` summary with notes.
 
 ### 4. Download artifacts with `fetch_build_output`
 
@@ -263,13 +277,14 @@ mcp call fetch_build_output '{
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
-## Skills Support (Explicit Invocation)
+## Skills Support (Seiro MCP Preferred for visionOS/Xcode)
 
 Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 
-- MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `fetch_build_output` directly.
-- Skill-assisted mode: explicitly request the `seiro-mcp-visionos-build-operator` skill, which orchestrates the same three MCP tools in a fixed sequence.
+- MCP-only mode: call `validate_sandbox_policy` / `build_visionos_app` / `inspect_build_diagnostics` (on failure) / `fetch_build_output` directly.
+- Skill-assisted mode: use the `seiro-mcp-visionos-build-operator` skill for Xcode / visionOS project workflows so Codex prefers Seiro MCP over direct `xcodebuild` / `swiftc`.
 - If `project_path` or `scheme` is missing in skill-assisted mode, run `inspect_xcode_schemes` first as optional preflight.
+- When discovering a project locally, remember that `.xcodeproj` and `.xcworkspace` are directory packages. Do not rely on file-only searches such as `rg --files` to decide they are absent.
 
 Skill path in this repository:
 - `skills/seiro-mcp-visionos-build-operator/SKILL.md`
@@ -280,14 +295,16 @@ seiro-mcp skill install seiro-mcp-visionos-build-operator --dry-run
 seiro-mcp skill install seiro-mcp-visionos-build-operator
 ```
 
-Explicit invocation examples:
+Prompt examples:
 - `Use seiro-mcp-visionos-build-operator for this visionOS build task.`
 - `Please run this using the seiro-mcp-visionos-build-operator skill.`
+- `Use Seiro MCP for this Xcode project instead of direct xcodebuild.`
 
 Important:
 - Skills provide orchestration guidance.
 - MCP provides execution capability.
-- Even in skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
+- In skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
+- For Xcode / visionOS project tasks, direct shell `xcodebuild` / `swiftc` should be treated as fallback paths, not the default path.
 
 ## Running (stdio / tcp)
 
@@ -309,7 +326,7 @@ Important:
 - Preferred: `cargo run -p xtask -- preflight` (runs fetch/check/test/fmt/clippy/build in order).
 - Manual: `cargo fetch` → `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`.
 - Unit tests in `src/server/config/mod.rs` cover configuration validation (success and error cases).
-- `tests/integration/visionos_build.rs` covers `validate_sandbox_policy`, `build_visionos_app`, and `fetch_build_output`, including TTL behavior.
+- `tests/integration/visionos_build.rs` covers `validate_sandbox_policy`, `build_visionos_app`, `inspect_build_diagnostics`, and `fetch_build_output`, including TTL behavior.
 
 
 ## Troubleshooting
@@ -323,6 +340,7 @@ Important:
 - **`path_not_allowed`**: add the project parent to `visionos.allowed_paths` and restart.
 - **`scheme_not_allowed`**: add the scheme to `visionos.allowed_schemes` and restart.
 - **`sdk_missing`**: check `details.diagnostics` first; if `probe_mode` is `env`, verify `VISIONOS_SANDBOX_SDKS`. Then run `inspect_xcode_sdks` and retry after SDK/config fixes.
+- **`build_failed`**: use `job_id` from the structured error and call `inspect_build_diagnostics` to identify file/line before retrying.
 
 ## References
 

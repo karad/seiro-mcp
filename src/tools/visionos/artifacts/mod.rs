@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::lib::errors::{ArtifactError, SandboxState, ToolErrorDescriptor};
 
-pub use store::{BuildJobRecord, BuildJobStatus, VisionOsArtifactStore, ARTIFACT_ROOT};
+pub use store::{
+    BuildFailureContext, BuildJobRecord, BuildJobStatus, VisionOsArtifactStore, ARTIFACT_ROOT,
+};
 
 /// Input for `fetch_build_output`.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -240,7 +242,7 @@ mod tests {
         let job_id = Uuid::new_v4();
 
         store
-            .record_failure(job_id, "failed".into(), Utc::now())
+            .record_failure(job_id, "failed".into(), None, Utc::now())
             .await
             .expect("record failure");
 
