@@ -5,19 +5,18 @@ fn repo_file(relative: &str) -> PathBuf {
 }
 
 #[test]
-fn feature_quickstart_covers_display_metadata_review() {
-    let quickstart = fs::read_to_string(repo_file("specs/017-display-metadata/quickstart.md"))
-        .expect("read feature quickstart");
+fn release_process_covers_display_metadata_review_steps() {
+    let release = fs::read_to_string(repo_file("docs/release.md")).expect("read docs/release.md");
 
     for expected in [
         "seiro-mcp-logo-large.png",
         "seiro-mcp-logo-small.svg",
-        "Open the Skill",
-        "docs/_config.yml",
+        "display_name",
+        "README",
     ] {
         assert!(
-            quickstart.contains(expected),
-            "quickstart should mention {expected}"
+            release.contains(expected),
+            "release doc should mention {expected}"
         );
     }
 }
