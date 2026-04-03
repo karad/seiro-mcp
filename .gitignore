@@ -52,3 +52,12 @@ DerivedData/
 .swiftpm/
 *.xcuserstate
 xcuserdata/
+
+# Temporary files
+
+tmp/
+output/
+
+# codex
+
+.agents/

@@ -151,6 +151,30 @@ fn skill_install_creates_bundled_skill_file() {
         .join("seiro-mcp-visionos-build-operator")
         .join("SKILL.md");
     assert!(installed_skill.exists(), "SKILL.md should be created");
+    assert!(
+        codex_home
+            .join(".codex/skills")
+            .join("seiro-mcp-visionos-build-operator")
+            .join("agents/openai.yaml")
+            .exists(),
+        "agents/openai.yaml should be created"
+    );
+    assert!(
+        codex_home
+            .join(".codex/skills")
+            .join("seiro-mcp-visionos-build-operator")
+            .join("assets/seiro-mcp-logo-large.png")
+            .exists(),
+        "large icon should be created"
+    );
+    assert!(
+        codex_home
+            .join(".codex/skills")
+            .join("seiro-mcp-visionos-build-operator")
+            .join("assets/seiro-mcp-logo-small.svg")
+            .exists(),
+        "small icon should be created"
+    );
 }
 
 #[test]

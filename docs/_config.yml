@@ -1,7 +1,7 @@
 theme: jekyll-theme-minimal
 logo: /assets/seiro-mcp-logo.png
 title: Seiro MCP Docs
-description: Seiro MCP server and visionOS tools
+description: Seiro MCP spatial computing server and visionOS build tools
 header_pages:
   - index.md
   - quickstart.md
@@ -11,4 +11,3 @@ header_pages:
   - telemetry.md
   - compatibility.md
   - release.md
-

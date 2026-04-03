@@ -28,8 +28,21 @@ pub const BUNDLED_VISIONOS_SKILL_NAME: &str = "seiro-mcp-visionos-build-operator
 /// Canonical main markdown file name for bundled skills.
 const BUNDLED_SKILL_MAIN_FILE: &str = "SKILL.md";
 /// Embedded bundled skill content copied by `skill install`.
-const BUNDLED_VISIONOS_SKILL_CONTENT: &str =
-    include_str!("../../skills/seiro-mcp-visionos-build-operator/SKILL.md");
+const BUNDLED_VISIONOS_SKILL_CONTENT: &[u8] =
+    include_bytes!("../../skills/seiro-mcp-visionos-build-operator/SKILL.md");
+/// Embedded OpenAI skill interface metadata copied by `skill install`.
+const BUNDLED_VISIONOS_OPENAI_METADATA_PATH: &str = "agents/openai.yaml";
+const BUNDLED_VISIONOS_OPENAI_METADATA: &[u8] =
+    include_bytes!("../../skills/seiro-mcp-visionos-build-operator/agents/openai.yaml");
+/// Embedded skill listing icon assets copied by `skill install`.
+const BUNDLED_VISIONOS_LARGE_ICON_PATH: &str = "assets/seiro-mcp-logo-large.png";
+const BUNDLED_VISIONOS_LARGE_ICON: &[u8] = include_bytes!(
+    "../../skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png"
+);
+const BUNDLED_VISIONOS_SMALL_ICON_PATH: &str = "assets/seiro-mcp-logo-small.svg";
+const BUNDLED_VISIONOS_SMALL_ICON: &[u8] = include_bytes!(
+    "../../skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg"
+);
 
 /// Validate skill name prefix.
 pub fn validate_skill_name_prefix(skill_name: &str) -> bool {
@@ -77,10 +90,24 @@ fn install_bundled_skill_to_destination(
         ));
     }
 
-    let files = [BundledSkillFile {
-        relative_path: BUNDLED_SKILL_MAIN_FILE,
-        content: BUNDLED_VISIONOS_SKILL_CONTENT,
-    }];
+    let files = [
+        BundledSkillFile {
+            relative_path: BUNDLED_SKILL_MAIN_FILE,
+            content: BUNDLED_VISIONOS_SKILL_CONTENT,
+        },
+        BundledSkillFile {
+            relative_path: BUNDLED_VISIONOS_OPENAI_METADATA_PATH,
+            content: BUNDLED_VISIONOS_OPENAI_METADATA,
+        },
+        BundledSkillFile {
+            relative_path: BUNDLED_VISIONOS_LARGE_ICON_PATH,
+            content: BUNDLED_VISIONOS_LARGE_ICON,
+        },
+        BundledSkillFile {
+            relative_path: BUNDLED_VISIONOS_SMALL_ICON_PATH,
+            content: BUNDLED_VISIONOS_SMALL_ICON,
+        },
+    ];
 
     let result =
         install_skill_files(destination_dir, &files, force, dry_run).with_context(|| {

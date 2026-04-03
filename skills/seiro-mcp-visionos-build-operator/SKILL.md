@@ -1,9 +1,13 @@
 ---
 name: seiro-mcp-visionos-build-operator
-description: Prefer Seiro MCP for Xcode and visionOS project build workflows. Use inspect_xcode_schemes (if needed) -> validate_sandbox_policy -> build_visionos_app -> inspect_build_diagnostics (on failure) -> fetch_build_output (on success), and avoid direct xcodebuild or swiftc unless the user explicitly asks for shell-level execution or MCP cannot handle the task.
+description: Build and diagnose visionOS projects with Seiro MCP. Use inspect_xcode_schemes (if needed) -> validate_sandbox_policy -> build_visionos_app -> inspect_build_diagnostics (on failure) -> fetch_build_output (on success), and avoid direct xcodebuild or swiftc unless the user explicitly asks for shell-level execution or MCP cannot handle the task.
 ---
 
 # seiro-mcp-visionos-build-operator
+
+Display label: **Seiro MCP VisionOS Build Operator**
+
+Listing summary: **Build and diagnose visionOS projects with Seiro MCP**
 
 ## Purpose
 
