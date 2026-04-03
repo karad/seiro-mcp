@@ -26,8 +26,8 @@ const HOME_ENV: &str = "HOME";
 pub struct BundledSkillFile<'a> {
     /// Path relative to skill directory (for example: `SKILL.md`).
     pub relative_path: &'a str,
-    /// UTF-8 content to write.
-    pub content: &'a str,
+    /// File content to write.
+    pub content: &'a [u8],
 }
 
 /// File write status for `install_skill_files`.
@@ -127,7 +127,7 @@ pub fn install_skill_files(
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(path, file.content.as_bytes())?;
+        fs::write(path, file.content)?;
     }
 
     Ok(SkillInstallResult {
@@ -507,7 +507,7 @@ mod tests {
         let destination = temp.path().join("skills").join("sample-skill");
         let files = [BundledSkillFile {
             relative_path: "SKILL.md",
-            content: "sample",
+            content: b"sample",
         }];
 
         let result =

@@ -39,6 +39,10 @@ This repository does not yet provide an automated release pipeline. Use this doc
 4. Validate docs consistency:
    - README / `docs/quickstart.md` / `docs/runbook.md` / `docs/config.md`
    - `docs/compatibility.md` reflects any contract decision
+5. Validate external display metadata:
+   - `skills/seiro-mcp-visionos-build-operator/agents/openai.yaml` contains `display_name`, `short_description`, `icon_large`, and `default_prompt`
+   - `skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png` and `skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg` are present
+   - docs and README still describe Seiro MCP and visionOS consistently
 
 ## Publishing (manual)
 

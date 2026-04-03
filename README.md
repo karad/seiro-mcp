@@ -8,7 +8,7 @@
 
 **This product is still experimental. Please use it with care.　No warranty is provided.**
 
-Seiro MCP is an MCP server focused on spatial computing development. Today it provides tools to safely run visionOS project builds from Codex CLI, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
+Seiro MCP is a spatial computing MCP server with visionOS build tools and bundled Codex skill guidance. Today it provides tools to safely run visionOS project builds from Codex CLI and other MCP clients, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
 
 Detailed start/stop procedures live in [`docs/runbook.md`](docs/runbook.md).
 
@@ -117,6 +117,7 @@ seiro-mcp skill install seiro-mcp-visionos-build-operator
 ```
 
 - The bundled skill name uses the `seiro-mcp-` prefix to avoid collisions.
+- The bundled skill ships display metadata via `skills/seiro-mcp-visionos-build-operator/agents/openai.yaml` and icon assets under `skills/seiro-mcp-visionos-build-operator/assets/`.
 - Use `seiro-mcp skill remove seiro-mcp-visionos-build-operator` to roll back.
 - `skill remove` returns `not_found` without failing when the skill is already absent.
 - Verify compatibility with `seiro-mcp --version` before skill operations.
