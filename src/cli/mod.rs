@@ -29,19 +29,19 @@ pub const BUNDLED_VISIONOS_SKILL_NAME: &str = "seiro-mcp-visionos-build-operator
 const BUNDLED_SKILL_MAIN_FILE: &str = "SKILL.md";
 /// Embedded bundled skill content copied by `skill install`.
 const BUNDLED_VISIONOS_SKILL_CONTENT: &[u8] =
-    include_bytes!("../../skills/seiro-mcp-visionos-build-operator/SKILL.md");
+    include_bytes!("../../.agents/skills/seiro-mcp-visionos-build-operator/SKILL.md");
 /// Embedded OpenAI skill interface metadata copied by `skill install`.
 const BUNDLED_VISIONOS_OPENAI_METADATA_PATH: &str = "agents/openai.yaml";
 const BUNDLED_VISIONOS_OPENAI_METADATA: &[u8] =
-    include_bytes!("../../skills/seiro-mcp-visionos-build-operator/agents/openai.yaml");
+    include_bytes!("../../.agents/skills/seiro-mcp-visionos-build-operator/agents/openai.yaml");
 /// Embedded skill listing icon assets copied by `skill install`.
 const BUNDLED_VISIONOS_LARGE_ICON_PATH: &str = "assets/seiro-mcp-logo-large.png";
 const BUNDLED_VISIONOS_LARGE_ICON: &[u8] = include_bytes!(
-    "../../skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png"
+    "../../.agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png"
 );
 const BUNDLED_VISIONOS_SMALL_ICON_PATH: &str = "assets/seiro-mcp-logo-small.svg";
 const BUNDLED_VISIONOS_SMALL_ICON: &[u8] = include_bytes!(
-    "../../skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg"
+    "../../.agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg"
 );
 
 /// Validate skill name prefix.

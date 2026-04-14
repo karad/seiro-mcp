@@ -117,17 +117,25 @@ seiro-mcp skill install seiro-mcp-visionos-build-operator
 ```
 
 - The bundled skill name uses the `seiro-mcp-` prefix to avoid collisions.
-- The bundled skill ships display metadata via `skills/seiro-mcp-visionos-build-operator/agents/openai.yaml` and icon assets under `skills/seiro-mcp-visionos-build-operator/assets/`.
+- The bundled skill canonical source is `.agents/skills/seiro-mcp-visionos-build-operator/`, including `SKILL.md`, `agents/openai.yaml`, and icon assets under `.agents/skills/seiro-mcp-visionos-build-operator/assets/`.
 - Use `seiro-mcp skill remove seiro-mcp-visionos-build-operator` to roll back.
 - `skill remove` returns `not_found` without failing when the skill is already absent.
 - Verify compatibility with `seiro-mcp --version` before skill operations.
 - For this release line, the bundled skill target is `seiro-mcp-visionos-build-operator`.
+- `seiro-mcp skill install` installs the bundled skill into the local Codex skills directory and does not install the Seiro MCP server binary or configure MCP settings.
 - Use `seiro-mcp --help`, `seiro-mcp skill --help`, and `seiro-mcp --version` for self-check.
   ```bash
   seiro-mcp --help
   seiro-mcp skill --help
   seiro-mcp skill install --help
   ```
+
+Alternative GitHub install path for Codex `skill-installer`:
+
+- Use Codex `skill-installer` with these arguments when you want to install the skill directly from the public GitHub repository:
+  - `--repo karad/seiro-mcp`
+  - `--path .agents/skills/seiro-mcp-visionos-build-operator`
+- This installs only the Codex skill files. You still need the `seiro-mcp` binary plus MCP server configuration (`MCP_CONFIG_PATH`, `MCP_SHARED_TOKEN`, and allowed visionOS settings).
 
 ## For Contributors (clone + local build)
 
@@ -288,13 +296,17 @@ Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 - When discovering a project locally, remember that `.xcodeproj` and `.xcworkspace` are directory packages. Do not rely on file-only searches such as `rg --files` to decide they are absent.
 
 Skill path in this repository:
-- `skills/seiro-mcp-visionos-build-operator/SKILL.md`
+- `.agents/skills/seiro-mcp-visionos-build-operator/SKILL.md`
 
 Install from CLI:
 ```bash
 seiro-mcp skill install seiro-mcp-visionos-build-operator --dry-run
 seiro-mcp skill install seiro-mcp-visionos-build-operator
 ```
+
+Install from GitHub with Codex `skill-installer`:
+- `--repo karad/seiro-mcp`
+- `--path .agents/skills/seiro-mcp-visionos-build-operator`
 
 Prompt examples:
 - `Use seiro-mcp-visionos-build-operator for this visionOS build task.`
@@ -305,6 +317,7 @@ Important:
 - Skills provide orchestration guidance.
 - MCP provides execution capability.
 - In skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
+- Installing the skill from GitHub or `seiro-mcp skill install` does not install the Seiro MCP server binary or configure the MCP client connection.
 - For Xcode / visionOS project tasks, direct shell `xcodebuild` / `swiftc` should be treated as fallback paths, not the default path.
 
 ## Running (stdio / tcp)
