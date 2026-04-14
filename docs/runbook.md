@@ -116,6 +116,7 @@ working_directory = "/absolute/path/to/working-directory"
 | Missing `project_path` / unknown `scheme` | Run `inspect_xcode_schemes` first. If request omits `project_path`, it resolves via current-directory `.xcodeproj` discovery, then `config.toml` `visionos.default_project_path`. |
 | `artifact_expired` | Call `fetch_build_output` within TTL; raise `visionos.artifact_ttl_secs` if needed and document the retrieval flow. |
 | TCP connect fail (`EADDRINUSE`) | Resolve port conflicts on `server.port` and retry. |
+| `seiro-mcp --help` or `skill install --dry-run` hangs only in an integrated terminal | Retry from Terminal.app first. On macOS we observed integrated-terminal launches blocked in AppleSystemPolicy evaluation before Rust `main`, while the same binary completed normally from Terminal.app. |
 
 ## Logs and telemetry
 - All logs go to stderr. `RUST_LOG=rmcp_sample=info` (or higher) emits `RuntimeModeTelemetry` (transport, config_path, pending_jobs, etc.).
@@ -139,3 +140,11 @@ seiro-mcp skill install seiro-mcp-visionos-build-operator
 Use this refresh sequence to pick up new preflight guidance such as `inspect_xcode_schemes`.
 After refresh, Codex should prefer the bundled Seiro MCP skill for Xcode / visionOS project workflows instead of direct shell `xcodebuild` / `swiftc`, unless shell-level execution was explicitly requested.
 When diagnosing project discovery issues, remember that `.xcodeproj` / `.xcworkspace` are directories, so file-only search commands can produce false negatives.
+
+The canonical public skill source is `.agents/skills/seiro-mcp-visionos-build-operator/`.
+If you prefer Codex `skill-installer`, use the GitHub path that maps to that directory:
+
+- `--repo karad/seiro-mcp`
+- `--path .agents/skills/seiro-mcp-visionos-build-operator`
+
+This GitHub install path only adds the Codex skill. It does not install the Seiro MCP server binary and it does not configure `MCP_CONFIG_PATH`, `MCP_SHARED_TOKEN`, or visionOS allowlists.

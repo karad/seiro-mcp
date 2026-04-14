@@ -151,6 +151,16 @@ fn skill_install_creates_bundled_skill_file() {
         .join("seiro-mcp-visionos-build-operator")
         .join("SKILL.md");
     assert!(installed_skill.exists(), "SKILL.md should be created");
+    let canonical_skill = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".agents/skills/seiro-mcp-visionos-build-operator/SKILL.md"),
+    )
+    .expect("canonical skill source should exist");
+    assert_eq!(
+        fs::read_to_string(&installed_skill).expect("installed skill should be readable"),
+        canonical_skill,
+        "installed skill should match canonical bundled source"
+    );
     assert!(
         codex_home
             .join(".codex/skills")
@@ -174,6 +184,19 @@ fn skill_install_creates_bundled_skill_file() {
             .join("assets/seiro-mcp-logo-small.svg")
             .exists(),
         "small icon should be created"
+    );
+    let installed_metadata = codex_home
+        .join(".codex/skills")
+        .join("seiro-mcp-visionos-build-operator")
+        .join("agents/openai.yaml");
+    assert_eq!(
+        fs::read_to_string(&installed_metadata).expect("installed metadata should be readable"),
+        fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(".agents/skills/seiro-mcp-visionos-build-operator/agents/openai.yaml"),
+        )
+        .expect("canonical metadata should exist"),
+        "installed metadata should match canonical bundled source"
     );
 }
 

@@ -60,4 +60,8 @@ output/
 
 # codex
 
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/seiro-mcp-visionos-build-operator/
+!.agents/skills/seiro-mcp-visionos-build-operator/**

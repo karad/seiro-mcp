@@ -2,11 +2,20 @@
 
 This checklist verifies the CLI behavior added in `013-cargo-install-distribution`.
 
+Canonical bundled skill source for this release line:
+
+```text
+.agents/skills/seiro-mcp-visionos-build-operator/
+```
+
+The manual test below still verifies installation into the local Codex skills directory. It does not move the install destination and it does not install the Seiro MCP server binary.
+
 ## Preconditions
 
 - Repository root:
-  - `/Users/kazuhirohara/sources/repos/company_works/seiro-mcp`
+  - `/Users/example-user/src/seiro-mcp`
 - Rust and Cargo are available.
+- On macOS, if commands appear to hang in an integrated terminal (for example VS Code / Codex), rerun the manual test from Terminal.app first. We observed cases where `seiro-mcp --help` was blocked by AppleSystemPolicy evaluation before Rust `main` started, while the same binary completed normally from Terminal.app.
 
 ## 1. Build sanity check
 
@@ -54,6 +63,7 @@ ls -la "$TMP_CODEX_HOME/.codex/skills/seiro-mcp-visionos-build-operator"
 Expected:
 - JSON `status` is `installed`.
 - `SKILL.md` exists under the destination directory.
+- Installed files originate from `.agents/skills/seiro-mcp-visionos-build-operator/`.
 
 ## 5. Existing-file protection (without force)
 
@@ -110,3 +120,129 @@ Record the following if you want auditable proof:
 - Command output snippets (`status`, `message`, and key paths).
 - Directory listings before/after install and remove.
 - `seiro-mcp --version` output.
+
+## Example Execution Record
+
+The following example summarizes one successful manual verification run. Paths are intentionally anonymized.
+
+### Environment
+
+- Repository root: `/Users/example-user/src/seiro-mcp`
+- Temporary Codex home: `/tmp/example-codex-home`
+- Binary under test: `./target/debug/seiro-mcp`
+- Execution shell: Terminal.app on macOS
+
+### Recorded Results
+
+1. Dry-run
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "dry-run: no files were modified",
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "planned",
+     "written_files": [
+       "SKILL.md",
+       "agents/openai.yaml",
+       "assets/seiro-mcp-logo-large.png",
+       "assets/seiro-mcp-logo-small.svg"
+     ]
+   }
+   ```
+   Verification:
+   - `find "/tmp/example-codex-home" -maxdepth 4 -type f` returned no files.
+
+2. Install
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "skill installed",
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "installed",
+     "written_files": [
+       "SKILL.md",
+       "agents/openai.yaml",
+       "assets/seiro-mcp-logo-large.png",
+       "assets/seiro-mcp-logo-small.svg"
+     ]
+   }
+   ```
+   Verification:
+   - Installed files:
+     - `/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator/SKILL.md`
+     - `/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator/agents/openai.yaml`
+     - `/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png`
+     - `/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg`
+
+3. Existing-file protection
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "skill files already exist; re-run with --force to overwrite",
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "skipped_existing",
+     "written_files": [
+       "SKILL.md",
+       "agents/openai.yaml",
+       "assets/seiro-mcp-logo-large.png",
+       "assets/seiro-mcp-logo-small.svg"
+     ]
+   }
+   ```
+   Verification:
+   - After manually replacing `SKILL.md` with `manually-modified`, the file content remained unchanged without `--force`.
+
+4. Force overwrite
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "skill installed",
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "installed",
+     "written_files": [
+       "SKILL.md",
+       "agents/openai.yaml",
+       "assets/seiro-mcp-logo-large.png",
+       "assets/seiro-mcp-logo-small.svg"
+     ]
+   }
+   ```
+   Verification:
+   - `SKILL.md` content returned to the bundled skill definition.
+
+5. Remove
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "skill removed",
+     "removed_files": [
+       "SKILL.md",
+       "agents/openai.yaml",
+       "assets/seiro-mcp-logo-large.png",
+       "assets/seiro-mcp-logo-small.svg"
+     ],
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "removed"
+   }
+   ```
+   Verification:
+   - The target skill directory was removed.
+   - A sibling directory such as `/tmp/example-codex-home/.codex/skills/seiro-mcp-keep/` remained intact.
+
+6. Remove non-existent skill
+   ```json
+   {
+     "destination_dir": "/tmp/example-codex-home/.codex/skills/seiro-mcp-visionos-build-operator",
+     "message": "skill not found",
+     "removed_files": [],
+     "skill_name": "seiro-mcp-visionos-build-operator",
+     "status": "not_found"
+   }
+   ```
+   Verification:
+   - Process exit code was `0`.
+
+## Troubleshooting
+
+- If `cargo run -- skill install ... --dry-run` appears to hang, first run `./target/debug/seiro-mcp --help` from Terminal.app to distinguish a CLI regression from an integrated-terminal execution-policy issue.
+- If Terminal.app succeeds but the integrated terminal hangs, treat it as an environment issue outside the Seiro CLI logic and continue the manual test from Terminal.app.

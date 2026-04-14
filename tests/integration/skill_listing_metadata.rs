@@ -6,7 +6,7 @@ fn repo_file(relative: &str) -> PathBuf {
 
 #[test]
 fn skill_listing_metadata_declares_required_interface_fields() {
-    let path = repo_file("skills/seiro-mcp-visionos-build-operator/agents/openai.yaml");
+    let path = repo_file(".agents/skills/seiro-mcp-visionos-build-operator/agents/openai.yaml");
     let contents =
         fs::read_to_string(&path).unwrap_or_else(|err| panic!("failed to read {path:?}: {err}"));
 
@@ -28,10 +28,12 @@ fn skill_listing_metadata_declares_required_interface_fields() {
 
 #[test]
 fn skill_listing_metadata_references_existing_assets() {
-    let large =
-        repo_file("skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png");
-    let small =
-        repo_file("skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg");
+    let large = repo_file(
+        ".agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png",
+    );
+    let small = repo_file(
+        ".agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg",
+    );
 
     assert!(large.is_file(), "missing large icon: {}", large.display());
     assert!(small.is_file(), "missing small icon: {}", small.display());
