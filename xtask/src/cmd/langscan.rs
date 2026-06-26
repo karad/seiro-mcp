@@ -12,7 +12,7 @@ pub fn run(path: Option<PathBuf>) -> Result<()> {
         root.join(scan_root)
     };
 
-    let files = fs::walk_files(&scan_root, |dir| should_skip_dir(&root, dir))?;
+    let files = fs::walk_files(&scan_root, |dir| should_skip_dir(&scan_root, dir))?;
     let mut hits = Vec::new();
     for file in files {
         if should_skip_file(&root, &file) {
