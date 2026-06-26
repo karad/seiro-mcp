@@ -9,47 +9,8 @@ use tokio::time::timeout;
 
 use crate::common::{fixture, spawn_server_process, BINARY_PATH};
 
-#[test]
-fn token_mismatch_causes_auth_token_mismatch_exit() {
-    let status = StdCommand::new(BINARY_PATH)
-        .env(
-            "MCP_CONFIG_PATH",
-            fixture("tests/fixtures/config_token_mismatch.toml"),
-        )
-        .env("MCP_SHARED_TOKEN", "wrong-token-000000")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .status()
-        .expect("process should start");
-    assert_eq!(
-        status.code(),
-        Some(42),
-        "AUTH_TOKEN_MISMATCH exit code (42) expected"
-    );
-}
-
-#[test]
-fn missing_token_causes_mcp_token_required_exit() {
-    let status = StdCommand::new(BINARY_PATH)
-        .env(
-            "MCP_CONFIG_PATH",
-            fixture("tests/fixtures/config_valid.toml"),
-        )
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .status()
-        .expect("process should start");
-    assert_eq!(
-        status.code(),
-        Some(43),
-        "MCP_TOKEN_REQUIRED exit code (43) expected"
-    );
-}
-
 #[tokio::test]
-async fn matching_token_allows_handshake() -> Result<()> {
+async fn token_is_not_required_for_stdio_handshake() -> Result<()> {
     let (mut child, transport, stderr_task) = spawn_server_process().await?;
     let client = serve_client(ClientInfo::default(), transport).await?;
     let list = client.list_tools(None).await?;
@@ -68,4 +29,29 @@ async fn matching_token_allows_handshake() -> Result<()> {
         let _ = handle.await;
     }
     Ok(())
+}
+
+#[test]
+fn transport_argument_is_not_supported() {
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("--transport=tcp")
+        .env(
+            "MCP_CONFIG_PATH",
+            fixture("tests/fixtures/seiro_mcp_minimal.toml"),
+        )
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("process should start");
+
+    assert!(
+        !output.status.success(),
+        "--transport should be rejected after TCP removal"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unexpected argument") || stderr.contains("Usage:"),
+        "stderr should explain unsupported argument, got: {stderr}"
+    );
 }

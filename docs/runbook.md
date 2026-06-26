@@ -14,35 +14,26 @@ lang: en
 
 ## Preparation
 
-1. Dependency + build chain (fixed order)
+1. Dependency + build chain:
    ```bash
    cargo run -p xtask -- preflight
    ```
-   - Manual alternative:
-     ```bash
-     cargo fetch
-     cargo check
-     cargo test --all -- --nocapture
-     cargo fmt -- --check
-     cargo clippy -- -D warnings
-     cargo build --release
-     ```
-2. Config: copy `config.example.toml` to `config.toml`, or point `MCP_CONFIG_PATH` to another path.
-3. Token: set `MCP_SHARED_TOKEN` (16–128 chars) to match `[auth].token`, or pass via `--token`.
-4. Refactor validation helpers (optional when working on Spec 008):
+2. Codex MCP registration:
    ```bash
-   cargo run -p xtask -- loc-guard
-   cargo run -p xtask -- refactor-check-docs
-   cargo run -p xtask -- api-baseline
+   seiro-mcp config mcp
    ```
-   - `scripts/**` still exist as thin wrappers around `xtask`.
+   Paste the output into `~/.codex/config.toml`.
+3. Project config from the target project root:
+   ```bash
+   seiro-mcp config project
+   ```
+   This creates `seiro-mcp.toml`.
 
 ## Environment variables
 
-### Required when launching from an MCP client
+### Optional launch override
 
-- `MCP_CONFIG_PATH` (required): absolute path to the TOML config file used by the server.
-- `MCP_SHARED_TOKEN` (required): shared secret (16–128 chars) that must match `[auth].token` in config.
+- `MCP_CONFIG_PATH`: absolute path to a non-default `seiro-mcp.toml`. Omit this for the normal Codex project-root workflow.
 
 ### Optional test/mocking helpers
 
@@ -59,74 +50,65 @@ These are intended for local development and tests; do not rely on them for prod
 ## How to launch
 
 ### Common options
-- `--config` or `MCP_CONFIG_PATH`: **absolute path** to config. Default is `config.toml` in CWD.
-- `--token` or `MCP_SHARED_TOKEN`: shared secret; CLI flag wins over env.
-- `--transport {stdio|tcp}`: defaults to `stdio`; `tcp` listens on `server.host` / `server.port`.
 
-### Inspector (stdio mode)
-```bash
-MCP_SHARED_TOKEN=<token> \
-MCP_CONFIG_PATH=$PWD/config.toml \
-npx @modelcontextprotocol/inspector seiro-mcp -- --transport=stdio
-```
-- Always launch via an MCP client to avoid `MCP_CLIENT_REQUIRED`.
-- If you are developing from source, replace `seiro-mcp` with `target/release/seiro-mcp`.
+- Default config: `seiro-mcp.toml` in the process current directory.
+- `--config` or `MCP_CONFIG_PATH`: explicit config path for non-default layouts.
+- Transport: local `stdio` only for the supported workflow.
+- Token setup is not required for the default local workflow.
 
-### Inspector (tcp mode)
+### Inspector
+
 ```bash
-MCP_SHARED_TOKEN=<token> \
-MCP_CONFIG_PATH=$PWD/config.toml \
-npx @modelcontextprotocol/inspector mcp connect tcp://127.0.0.1:8787 -- \
-  seiro-mcp --transport=tcp --config=$PWD/config.toml
+npx @modelcontextprotocol/inspector seiro-mcp
 ```
-- Startup fails on port conflicts (`EADDRINUSE`).
-- If you are developing from source, replace `seiro-mcp` with `target/release/seiro-mcp`.
+
+If you are developing from source, replace `seiro-mcp` with `target/release/seiro-mcp`.
 
 ### Codex CLI example
+
 ```toml
-[mcp_servers.operational]
+[mcp_servers.seiro_mcp]
 command = "/Users/<user>/.cargo/bin/seiro-mcp"
-args = ["--transport=stdio"]
-env.MCP_CONFIG_PATH = "/absolute/path/to/config.toml"
-env.MCP_SHARED_TOKEN = "<token>"
-working_directory = "/absolute/path/to/working-directory"
 ```
-- For TCP, set `args = ["--transport=tcp"]` and align `server.host` / `server.port` in config.
+
+Use `seiro-mcp config mcp` to print this snippet with the actual binary path.
+
+## TCP status
+
+TCP is not part of the currently supported local workflow. If TCP is reintroduced later, it should be designed as a separate remote/server mode with localhost defaults, connection-level authentication, exposure guidance, and Inspector-specific validation steps.
 
 ## Stop flow and exit codes
+
 - `Ctrl+C` (SIGINT) ends with exit code 0.
 - Common failure exits:
-  - 42: `AUTH_TOKEN_MISMATCH` (`[auth].token` mismatch)
-  - 43: `MCP_TOKEN_REQUIRED` (missing token)
   - 44: `MCP_CLIENT_REQUIRED` (stdin/stdout is a TTY)
-  - Missing config: `CONFIG_MISSING_FIELD` (exit 1), emitted as structured JSON on stderr.
+  - Missing config or invalid config: startup exits non-zero and prints structured details to stderr.
 
 ## Troubleshooting
 
 | Symptom / code | Resolution |
 | --- | --- |
-| `CONFIG_MISSING_FIELD` / `CONFIG_INVALID_FIELD` | Check required keys in `config.toml`; ensure `MCP_CONFIG_PATH` points to the intended file. |
-| `AUTH_TOKEN_MISMATCH` (42) | Align `MCP_SHARED_TOKEN` or `--token` with `[auth].token`; spaces or short values fail. |
-| `MCP_TOKEN_REQUIRED` (43) | Token missing. Provide a 16–128 char ASCII/UTF-8 value. |
+| Config file missing | Run `seiro-mcp config project` in the project root, or set `MCP_CONFIG_PATH` to an absolute `seiro-mcp.toml` path. |
 | `MCP_CLIENT_REQUIRED` (44) | You ran `cargo run` directly. Launch via Inspector / Codex as a child process. |
-| `seiro-mcp: command not found` | Confirm `cargo install seiro-mcp --locked` completed and use absolute path from `which seiro-mcp` in client config. |
+| `seiro-mcp: command not found` | Confirm `cargo install seiro-mcp --locked` completed, then run `seiro-mcp config mcp`. |
 | `sdk_missing` | Check `details.diagnostics` from `validate_sandbox_policy`, optionally run `inspect_xcode_sdks`, then install/fix SDK settings and retry. |
 | `build_failed` and manual root-cause analysis is slow | Call `inspect_build_diagnostics` with the returned `job_id` to get typecheck-based file/line diagnostics before retrying. |
-| `destination_ambiguous` | Re-run `build_visionos_app` with the returned `details.suggested_destination` (or choose one entry from `details.available_destinations`). |
-| Missing `project_path` / unknown `scheme` | Run `inspect_xcode_schemes` first. If request omits `project_path`, it resolves via current-directory `.xcodeproj` discovery, then `config.toml` `visionos.default_project_path`. |
+| `destination_ambiguous` | Re-run `build_visionos_app` with the returned `details.suggested_destination` or choose one entry from `details.available_destinations`. |
+| Missing `project_path` / unknown `scheme` | Run `inspect_xcode_schemes` first. If request omits `project_path`, it resolves via current-directory `.xcodeproj` discovery, then `seiro-mcp.toml` `visionos.default_project_path`. |
 | `artifact_expired` | Call `fetch_build_output` within TTL; raise `visionos.artifact_ttl_secs` if needed and document the retrieval flow. |
-| TCP connect fail (`EADDRINUSE`) | Resolve port conflicts on `server.port` and retry. |
 | `seiro-mcp --help` or `skill install --dry-run` hangs only in an integrated terminal | Retry from Terminal.app first. On macOS we observed integrated-terminal launches blocked in AppleSystemPolicy evaluation before Rust `main`, while the same binary completed normally from Terminal.app. |
 
 ## Logs and telemetry
-- All logs go to stderr. `RUST_LOG=rmcp_sample=info` (or higher) emits `RuntimeModeTelemetry` (transport, config_path, pending_jobs, etc.).
+
+- All logs go to stderr. `RUST_LOG=rmcp_sample=info` (or higher) emits runtime telemetry with transport, config path, pending jobs, instructions, and launch args.
 - Build job spans are under the `rmcp_sample::visionos` target. Enable JSON logs with `RUST_TRACING_FORMAT=json`.
 
 ## Manual verification
-1. Run the build chain above (Clippy after TODO is resolved).
-2. In Inspector stdio mode, confirm `mcp list` shows the visionOS tools.
-3. Restart Codex CLI and confirm `mcp describe operational` shows the visionOS tools, including `inspect_xcode_sdks`.
-4. In the visionOS mock flow, run `inspect_xcode_schemes` (optional preflight) → `validate_sandbox_policy` → `inspect_xcode_sdks` (optional) → `build_visionos_app` → `inspect_build_diagnostics` (on failure) → `fetch_build_output` (on success, optionally set `MOCK_XCODEBUILD_BEHAVIOR`).
+
+1. Run the build chain above.
+2. In Inspector mode, confirm `mcp list` shows the visionOS tools.
+3. Restart Codex CLI and confirm `mcp describe seiro_mcp` shows the visionOS tools, including `inspect_xcode_sdks`.
+4. In the visionOS mock flow, run `inspect_xcode_schemes` (optional preflight) -> `validate_sandbox_policy` -> `inspect_xcode_sdks` (optional) -> `build_visionos_app` -> `inspect_build_diagnostics` (on failure) -> `fetch_build_output` (on success, optionally set `MOCK_XCODEBUILD_BEHAVIOR`).
 
 ## Updating installed local skill definitions
 
@@ -134,17 +116,14 @@ When the bundled skill in this repository is updated, refresh local installed co
 
 ```bash
 seiro-mcp skill remove seiro-mcp-visionos-build-operator
-seiro-mcp skill install seiro-mcp-visionos-build-operator
+seiro-mcp skill install
 ```
 
-Use this refresh sequence to pick up new preflight guidance such as `inspect_xcode_schemes`.
-After refresh, Codex should prefer the bundled Seiro MCP skill for Xcode / visionOS project workflows instead of direct shell `xcodebuild` / `swiftc`, unless shell-level execution was explicitly requested.
-When diagnosing project discovery issues, remember that `.xcodeproj` / `.xcworkspace` are directories, so file-only search commands can produce false negatives.
-
 The canonical public skill source is `.agents/skills/seiro-mcp-visionos-build-operator/`.
+`seiro-mcp skill install` defaults to `seiro-mcp-visionos-build-operator`; explicit skill-name installation remains supported for compatibility.
 If you prefer Codex `skill-installer`, use the GitHub path that maps to that directory:
 
 - `--repo karad/seiro-mcp`
 - `--path .agents/skills/seiro-mcp-visionos-build-operator`
 
-This GitHub install path only adds the Codex skill. It does not install the Seiro MCP server binary and it does not configure `MCP_CONFIG_PATH`, `MCP_SHARED_TOKEN`, or visionOS allowlists.
+This GitHub install path only adds the Codex skill. It does not install the Seiro MCP server binary and it does not configure the MCP client connection.

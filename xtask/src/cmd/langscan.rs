@@ -53,6 +53,7 @@ fn should_skip_dir(repo_root: &Path, dir: &Path) -> bool {
             || c == ".specify"
             || c == "docs"
             || c == ".codex"
+            || c == "tmp"
     })
 }
 

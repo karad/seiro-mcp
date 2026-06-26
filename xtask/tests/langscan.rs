@@ -9,9 +9,11 @@ fn langscan_ignores_excluded_paths_and_agents_md() {
     let temp = tempfile::tempdir().expect("create temp dir");
     std::fs::create_dir_all(temp.path().join("specs")).expect("create specs dir");
     std::fs::create_dir_all(temp.path().join(".codex/pr")).expect("create .codex dir");
+    std::fs::create_dir_all(temp.path().join("tmp")).expect("create tmp dir");
     let japanese = "\u{65E5}\u{672C}\u{8A9E}";
     std::fs::write(temp.path().join("specs/ja.txt"), japanese).expect("write file");
     std::fs::write(temp.path().join(".codex/pr/ja.txt"), japanese).expect("write file");
+    std::fs::write(temp.path().join("tmp/ja.txt"), japanese).expect("write file");
     std::fs::write(temp.path().join("AGENTS.md"), japanese).expect("write file");
 
     let output = Command::new(xtask_bin())

@@ -11,13 +11,13 @@ The visionOS tools emit structured logs with `tracing` so each build job can be 
 ## RuntimeModeTelemetry
 
 - Emitted at startup by `src/lib/telemetry.rs::RuntimeModeTelemetry`.
-- Fields: `transport` (stdio/tcp), `config_path` (absolute), `host`, `port`, `pending_jobs`, `instructions`.
+- Fields: `transport` (`stdio`), `config_path` (absolute), `pending_jobs`, `instructions`, `launch_args`.
 - Use `RUST_LOG=rmcp_sample=info` or higher to see JSON/text on stderr (Runbook uses this for startup checks).
 
 Example:
 ```text
 INFO rmcp_sample::runtime: starting MCP server
-    transport="tcp" config_path="/Users/example/seiro-mcp/config.toml" host="127.0.0.1" port=8787 pending_jobs=0 instructions="load config /Users/.../config.toml ..."
+    transport="stdio" config_path="/Users/example/app/seiro-mcp.toml" pending_jobs=0 instructions="Loaded config /Users/example/app/seiro-mcp.toml; waiting in stdio mode from a local MCP client."
 ```
 
 ## tracing init

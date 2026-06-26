@@ -278,20 +278,6 @@ pub enum ToolErrorBuilderError {
     MissingRemediation { code: &'static str },
 }
 
-/// Standard error for authentication mismatches.
-pub const AUTH_TOKEN_MISMATCH_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
-    "AUTH_TOKEN_MISMATCH",
-    "MCP_SHARED_TOKEN does not match config.toml [auth].token",
-    "Set the same token in both Codex CLI and Inspector before retrying.",
-);
-
-/// Standard error when no token is provided.
-pub const MCP_TOKEN_REQUIRED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
-    "MCP_TOKEN_REQUIRED",
-    "MCP_SHARED_TOKEN is unset or shorter than 16 characters",
-    "Set MCP_SHARED_TOKEN to a random string at least 16 characters long that matches config.toml.",
-);
-
 /// Standard error when executed without an MCP client.
 pub const MCP_CLIENT_REQUIRED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "MCP_CLIENT_REQUIRED",

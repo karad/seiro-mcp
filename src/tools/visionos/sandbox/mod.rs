@@ -25,7 +25,7 @@ pub use probe::{EnvSandboxProbe, SandboxProbe, SystemSandboxProbe};
 const PATH_NOT_ALLOWED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "path_not_allowed",
     "project_path is outside the allowed paths",
-    "Update visionos.allowed_paths in config.toml and restart the MCP server.",
+    "Update visionos.allowed_paths in seiro-mcp.toml and restart the MCP server.",
 );
 const SDK_MISSING_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "sdk_missing",

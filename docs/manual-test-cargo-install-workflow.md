@@ -46,17 +46,19 @@ Expected:
 ```bash
 TMP_CODEX_HOME="$(mktemp -d)"
 CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install seiro-mcp-visionos-build-operator --dry-run
+CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install --dry-run
 find "$TMP_CODEX_HOME" -maxdepth 4 -type f
 ```
 
 Expected:
 - JSON `status` is `planned`.
+- Both the explicit skill name and omitted skill name forms plan `seiro-mcp-visionos-build-operator`.
 - No files are created.
 
 ## 4. Install success path
 
 ```bash
-CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install seiro-mcp-visionos-build-operator
+CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install
 ls -la "$TMP_CODEX_HOME/.codex/skills/seiro-mcp-visionos-build-operator"
 ```
 
@@ -69,7 +71,7 @@ Expected:
 
 ```bash
 echo "manually-modified" > "$TMP_CODEX_HOME/.codex/skills/seiro-mcp-visionos-build-operator/SKILL.md"
-CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install seiro-mcp-visionos-build-operator
+CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install
 cat "$TMP_CODEX_HOME/.codex/skills/seiro-mcp-visionos-build-operator/SKILL.md"
 ```
 
@@ -80,7 +82,7 @@ Expected:
 ## 6. Force overwrite path
 
 ```bash
-CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install seiro-mcp-visionos-build-operator --force
+CODEX_HOME="$TMP_CODEX_HOME" cargo run -- skill install --force
 head -n 5 "$TMP_CODEX_HOME/.codex/skills/seiro-mcp-visionos-build-operator/SKILL.md"
 ```
 

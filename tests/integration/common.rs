@@ -8,16 +8,14 @@ use tokio::{
 };
 
 pub const BINARY_PATH: &str = env!("CARGO_BIN_EXE_seiro-mcp");
-pub const VALID_TOKEN: &str = "valid-token-123456";
 
 pub async fn spawn_server_process() -> Result<(Child, ChildIoBridge, Option<JoinHandle<()>>)> {
     let mut command = Command::new(BINARY_PATH);
     command
         .env(
             "MCP_CONFIG_PATH",
-            fixture("tests/fixtures/config_valid.toml"),
+            fixture("tests/fixtures/seiro_mcp_minimal.toml"),
         )
-        .env("MCP_SHARED_TOKEN", VALID_TOKEN)
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped());
