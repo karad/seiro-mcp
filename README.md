@@ -1,12 +1,11 @@
 <p align="center">
-  <img src="./docs/assets/seiro-mcp-logo.png" alt="Seiro MCP Logo" width="240" />
+  <img src="./docs/assets/seiro-mcp-logo.png" alt="Seiro MCP Logo" width="240" /><br/>
+  <strong>Lightweight visionOS Build MCP for AI Coding Agents</strong>
 </p>
 
 [![CI](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/karad/seiro-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://karad.github.io/seiro-mcp/)
-
-**This product is still experimental. Please use it with care.　No warranty is provided.**
 
 Seiro MCP is a spatial computing MCP server with visionOS build tools and bundled Codex skill guidance. Today it provides tools to safely run visionOS project builds from Codex CLI and other MCP clients, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
 
