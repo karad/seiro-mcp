@@ -25,7 +25,7 @@ const LOG_EXCERPT_LIMIT: usize = 5_000;
 const PATH_NOT_ALLOWED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "path_not_allowed",
     "project_path is outside the allowlist",
-    "Update visionos.allowed_paths in config.toml and restart the MCP server.",
+    "Update visionos.allowed_paths in seiro-mcp.toml and restart the MCP server.",
 );
 const INVALID_INPUT_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "invalid_request",
@@ -35,7 +35,7 @@ const INVALID_INPUT_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
 const SCHEME_NOT_ALLOWED_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "scheme_not_allowed",
     "scheme is not in the allowlist",
-    "Update visionos.allowed_schemes in config.toml or use an allowed scheme.",
+    "Update visionos.allowed_schemes in seiro-mcp.toml or use an allowed scheme.",
 );
 const TIMEOUT_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "timeout",

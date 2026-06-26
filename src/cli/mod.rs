@@ -1,5 +1,5 @@
 //! CLI entrypoint module structure.
-use std::path::Path;
+use std::{fs, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use serde_json::json;
@@ -13,13 +13,10 @@ pub mod args;
 pub mod profile;
 
 pub use args::{
-    CliCommand, LaunchProfileArgs, ParsedCommand, SkillArgs, SkillCommand, SkillInstallArgs,
-    SkillRemoveArgs,
+    CliCommand, ConfigArgs, ConfigCommand, ConfigProjectArgs, LaunchProfileArgs, ParsedCommand,
+    SkillArgs, SkillCommand, SkillInstallArgs, SkillRemoveArgs,
 };
-pub use profile::{
-    build_launch_args, resolve_config_path, resolve_token, LaunchProfile, TokenSource,
-    TransportMode,
-};
+pub use profile::{build_launch_args, resolve_config_path, LaunchProfile};
 
 /// Prefix reserved for Seiro-managed bundled skills.
 pub const SKILL_NAME_PREFIX: &str = "seiro-mcp-";
@@ -43,21 +40,36 @@ const BUNDLED_VISIONOS_SMALL_ICON_PATH: &str = "assets/seiro-mcp-logo-small.svg"
 const BUNDLED_VISIONOS_SMALL_ICON: &[u8] = include_bytes!(
     "../../.agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg"
 );
+const PROJECT_CONFIG_FILE: &str = "seiro-mcp.toml";
+const PROJECT_CONFIG_TEMPLATE: &str = r#"[visionos]
+allowed_paths = []
+allowed_schemes = []
+xcode_path = "/Applications/Xcode.app/Contents/Developer"
+"#;
 
 /// Validate skill name prefix.
 pub fn validate_skill_name_prefix(skill_name: &str) -> bool {
     skill_name.starts_with(SKILL_NAME_PREFIX)
 }
 
+fn resolve_install_skill_name(skill_name: Option<String>) -> String {
+    skill_name.unwrap_or_else(|| BUNDLED_VISIONOS_SKILL_NAME.to_string())
+}
+
 /// Execute CLI command mode and return a user-facing result payload.
 pub fn execute_cli_command(command: CliCommand) -> Result<String> {
     match command {
+        CliCommand::Config(config) => match config.command {
+            ConfigCommand::Mcp => render_mcp_config_snippet(),
+            ConfigCommand::Project(args) => write_project_config(args.force),
+        },
         CliCommand::Skill(skill) => match skill.command {
             SkillCommand::Install(args) => {
-                let destination_dir = resolve_skill_install_dir(&args.skill_name)
-                    .map_err(|message| anyhow!(message))?;
+                let skill_name = resolve_install_skill_name(args.skill_name);
+                let destination_dir =
+                    resolve_skill_install_dir(&skill_name).map_err(|message| anyhow!(message))?;
                 install_bundled_skill_to_destination(
-                    &args.skill_name,
+                    &skill_name,
                     &destination_dir,
                     args.force,
                     args.dry_run,
@@ -75,6 +87,48 @@ pub fn execute_cli_command(command: CliCommand) -> Result<String> {
             }
         },
     }
+}
+
+/// Render TOML that can be pasted into Codex MCP settings.
+pub fn render_mcp_config_snippet() -> Result<String> {
+    let current_exe =
+        std::env::current_exe().context("failed to resolve current executable path")?;
+    if !current_exe.is_absolute() {
+        return Err(anyhow!("resolved executable path is not absolute"));
+    }
+    Ok(format!(
+        "[mcp_servers.seiro_mcp]\ncommand = \"{}\"",
+        current_exe.display()
+    ))
+}
+
+/// Create the project-local Seiro MCP config file.
+pub fn write_project_config(force: bool) -> Result<String> {
+    let cwd = std::env::current_dir().context("failed to obtain current directory")?;
+    write_project_config_in_dir(&cwd, force)
+}
+
+fn write_project_config_in_dir(directory: &Path, force: bool) -> Result<String> {
+    let destination = directory.join(PROJECT_CONFIG_FILE);
+    if destination.exists() && !force {
+        return Err(anyhow!(
+            "{} already exists; re-run with --force to overwrite",
+            PROJECT_CONFIG_FILE
+        ));
+    }
+    fs::write(&destination, PROJECT_CONFIG_TEMPLATE).with_context(|| {
+        format!(
+            "failed to write project config to {}",
+            destination.to_string_lossy()
+        )
+    })?;
+    Ok(format!(
+        "created {}",
+        destination
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(PROJECT_CONFIG_FILE)
+    ))
 }
 
 /// Install bundled skill files and format a JSON response payload.
@@ -205,6 +259,66 @@ mod tests {
         assert!(
             payload.contains("\"status\": \"planned\""),
             "payload: {payload}"
+        );
+    }
+
+    #[test]
+    fn resolve_install_skill_name_defaults_to_bundled_visionos_skill() {
+        assert_eq!(
+            resolve_install_skill_name(None),
+            BUNDLED_VISIONOS_SKILL_NAME
+        );
+        assert_eq!(
+            resolve_install_skill_name(Some("seiro-mcp-custom".to_string())),
+            "seiro-mcp-custom"
+        );
+    }
+
+    #[test]
+    fn render_mcp_config_snippet_contains_only_codex_mcp_toml() {
+        let snippet = render_mcp_config_snippet().expect("snippet should render");
+        assert!(snippet.starts_with("[mcp_servers.seiro_mcp]\n"));
+        assert!(snippet.contains("command = \""));
+        assert!(!snippet.contains("MCP_CONFIG_PATH"));
+        assert!(!snippet.contains("MCP_SHARED_TOKEN"));
+        assert!(!snippet.contains("working_directory"));
+    }
+
+    #[test]
+    fn write_project_config_creates_minimal_file() {
+        let temp = tempdir().expect("can create temporary directory");
+        let result = write_project_config_in_dir(temp.path(), false);
+
+        result.expect("project config should be created");
+        assert_eq!(
+            fs::read_to_string(temp.path().join(PROJECT_CONFIG_FILE)).expect("can read config"),
+            PROJECT_CONFIG_TEMPLATE
+        );
+    }
+
+    #[test]
+    fn write_project_config_preserves_existing_without_force() {
+        let temp = tempdir().expect("can create temporary directory");
+        fs::write(temp.path().join(PROJECT_CONFIG_FILE), "existing").expect("can write existing");
+        let result = write_project_config_in_dir(temp.path(), false);
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(temp.path().join(PROJECT_CONFIG_FILE)).expect("can read config"),
+            "existing"
+        );
+    }
+
+    #[test]
+    fn write_project_config_overwrites_with_force() {
+        let temp = tempdir().expect("can create temporary directory");
+        fs::write(temp.path().join(PROJECT_CONFIG_FILE), "existing").expect("can write existing");
+        let result = write_project_config_in_dir(temp.path(), true);
+
+        result.expect("force should overwrite");
+        assert_eq!(
+            fs::read_to_string(temp.path().join(PROJECT_CONFIG_FILE)).expect("can read config"),
+            PROJECT_CONFIG_TEMPLATE
         );
     }
 

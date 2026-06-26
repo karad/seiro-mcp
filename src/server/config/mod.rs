@@ -11,7 +11,6 @@ pub mod server;
 pub mod telemetry;
 pub mod visionos;
 
-pub use auth::{parse_auth_section, AuthSection, RawAuthSection};
 pub use server::{
     parse_server_section, parse_tools_section, RawServerSection, RawToolsSection, ServerSection,
     DEFAULT_HOST, DEFAULT_PORT,
@@ -23,13 +22,12 @@ pub use visionos::{
 };
 
 const CONFIG_ENV_KEY: &str = "MCP_CONFIG_PATH";
-const DEFAULT_CONFIG_PATH: &str = "config.toml";
+const DEFAULT_CONFIG_PATH: &str = "seiro-mcp.toml";
 
 /// Top-level configuration container.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub server: ServerSection,
-    pub auth: AuthSection,
     pub visionos: VisionOsConfig,
     pub source_path: PathBuf,
 }
@@ -37,13 +35,13 @@ pub struct ServerConfig {
 #[derive(Debug, Deserialize)]
 struct RawServerConfig {
     server: Option<RawServerSection>,
-    auth: Option<RawAuthSection>,
+    auth: Option<auth::RawAuthSection>,
     tools: Option<RawToolsSection>,
     visionos: Option<RawVisionOsConfig>,
 }
 
 impl ServerConfig {
-    /// Prefer `MCP_CONFIG_PATH` if set; otherwise read `config.toml`.
+    /// Prefer `MCP_CONFIG_PATH` if set; otherwise read `seiro-mcp.toml`.
     pub fn load_from_env_or_default() -> Result<Self, ConfigError> {
         let (path, from_env) = match env::var(CONFIG_ENV_KEY) {
             Ok(value) if !value.trim().is_empty() => (PathBuf::from(value), true),
@@ -101,13 +99,12 @@ impl ServerConfig {
 
     fn from_raw(raw: RawServerConfig, path: PathBuf) -> Result<Self, ConfigError> {
         let server = parse_server_section(raw.server, &path)?;
-        let auth = parse_auth_section(raw.auth, &path)?;
+        let _auth = raw.auth;
         parse_tools_section(raw.tools, &path)?;
         let visionos = parse_visionos_section(path.clone(), raw.visionos)?;
 
         Ok(Self {
             server,
-            auth,
             visionos,
             source_path: path,
         })
@@ -149,7 +146,6 @@ mod tests {
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 8787);
-        assert_eq!(config.auth.token, "valid-token-123456");
         assert_eq!(
             config.visionos.allowed_paths,
             vec![PathBuf::from("/Users/example/codex/workspaces")]
@@ -183,14 +179,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_token_returns_error() {
-        let error = ServerConfig::load_from_path(fixture_path("config_missing_token.toml"))
-            .expect_err("should error when token is missing");
+    fn missing_token_is_allowed() {
+        let config = ServerConfig::load_from_path(fixture_path("config_missing_token.toml"))
+            .expect("auth.token should no longer be required");
 
-        match error {
-            ConfigError::MissingField { field, .. } => assert_eq!(field, "auth.token"),
-            other => panic!("Unexpected error: {other:?}", other = other),
-        }
+        assert_eq!(config.server.host, "127.0.0.1");
+        assert!(config
+            .visionos
+            .allowed_schemes
+            .iter()
+            .any(|s| s == "VisionApp"));
     }
 
     #[test]
@@ -212,7 +210,6 @@ mod tests {
         });
 
         assert_eq!(config.source_path, path);
-        assert_eq!(config.auth.token, "valid-token-123456");
         assert_eq!(
             config.visionos.xcodebuild_path,
             PathBuf::from("/usr/bin/xcodebuild")
@@ -258,6 +255,19 @@ mod tests {
             }
             other => panic!("Unexpected error: {other:?}", other = other),
         }
+    }
+
+    #[test]
+    fn load_minimal_seiro_mcp_config_without_auth_or_server() {
+        let config = ServerConfig::load_from_path(fixture_path("seiro_mcp_minimal.toml"))
+            .expect("minimal seiro-mcp.toml should load");
+
+        assert!(config.visionos.allowed_paths.is_empty());
+        assert!(config.visionos.allowed_schemes.is_empty());
+        assert_eq!(
+            config.visionos.xcode_path,
+            PathBuf::from("/Applications/Xcode.app/Contents/Developer")
+        );
     }
 
     #[test]

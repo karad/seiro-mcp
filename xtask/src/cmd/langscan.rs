@@ -12,7 +12,7 @@ pub fn run(path: Option<PathBuf>) -> Result<()> {
         root.join(scan_root)
     };
 
-    let files = fs::walk_files(&scan_root, |dir| should_skip_dir(&root, dir))?;
+    let files = fs::walk_files(&scan_root, |dir| should_skip_dir(&scan_root, dir))?;
     let mut hits = Vec::new();
     for file in files {
         if should_skip_file(&root, &file) {
@@ -53,6 +53,7 @@ fn should_skip_dir(repo_root: &Path, dir: &Path) -> bool {
             || c == ".specify"
             || c == "docs"
             || c == ".codex"
+            || c == "tmp"
     })
 }
 

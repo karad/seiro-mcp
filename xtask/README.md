@@ -11,7 +11,7 @@ cargo run -p xtask -- <COMMAND> [ARGS]
 ## Commands
 
 - `preflight`: Runs the local quality gate in order: `cargo fetch` → `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`.
-- `langscan [PATH]`: Detects Japanese text outside excluded paths (`specs/**`, `.specify/**`, `docs/**`, `.codex/**`, `target/**`) and ignores `AGENTS.md`.
+- `langscan [PATH]`: Detects Japanese text outside excluded paths (`specs/**`, `.specify/**`, `docs/**`, `.codex/**`, `target/**`, `tmp/**`) and ignores `AGENTS.md`.
 - `docs-langscan [PATH]`: Detects Japanese text under `docs/` (defaults to `docs/`) excluding `docs/ja/**`.
 - `check-docs-links [FILES...]`: Validates internal Markdown links and heading anchors under `docs/` (defaults to `docs/*.md` at depth 1). External links are ignored.
 - `loc-baseline`: Prints the top 5 longest Rust files under `src/` (line counts).

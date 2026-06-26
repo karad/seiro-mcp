@@ -81,3 +81,60 @@ fn docs_explain_skill_installation_boundary() {
         "README should mention skill-installer"
     );
 }
+
+#[test]
+fn docs_present_minimal_config_setup_commands() {
+    let readme = fs::read_to_string(repo_file("README.md")).expect("read README.md");
+    let quickstart =
+        fs::read_to_string(repo_file("docs/quickstart.md")).expect("read docs/quickstart.md");
+    let runbook = fs::read_to_string(repo_file("docs/runbook.md")).expect("read docs/runbook.md");
+    let config = fs::read_to_string(repo_file("docs/config.md")).expect("read docs/config.md");
+
+    for contents in [&readme, &quickstart, &runbook, &config] {
+        assert!(
+            contents.contains("seiro-mcp config mcp"),
+            "docs must show the paste-ready Codex config command"
+        );
+        assert!(
+            contents.contains("seiro-mcp config project"),
+            "docs must show the project config generator command"
+        );
+        assert!(
+            contents.contains("seiro-mcp.toml"),
+            "docs must name the project-local config file"
+        );
+    }
+
+    assert!(readme.contains("[mcp_servers.seiro_mcp]"));
+    assert!(config.contains("[visionos]"));
+}
+
+#[test]
+fn docs_do_not_present_token_or_tcp_as_normal_setup() {
+    let readme = fs::read_to_string(repo_file("README.md")).expect("read README.md");
+    let quickstart =
+        fs::read_to_string(repo_file("docs/quickstart.md")).expect("read docs/quickstart.md");
+    let runbook = fs::read_to_string(repo_file("docs/runbook.md")).expect("read docs/runbook.md");
+    let compatibility =
+        fs::read_to_string(repo_file("docs/compatibility.md")).expect("read docs/compatibility.md");
+
+    for contents in [&readme, &quickstart, &runbook] {
+        assert!(
+            !contents.contains("MCP_SHARED_TOKEN"),
+            "normal setup docs must not require tokens"
+        );
+        assert!(
+            !contents.contains("--transport"),
+            "normal setup docs must not expose transport switching"
+        );
+        assert!(
+            !contents.contains("tcp://"),
+            "normal setup docs must not expose TCP endpoints"
+        );
+    }
+
+    assert!(
+        compatibility.contains("not part of the current supported runtime"),
+        "compatibility docs must explicitly defer TCP support"
+    );
+}

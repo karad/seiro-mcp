@@ -34,9 +34,9 @@ This site hosts the minimal Rust MCP server (rmcp v0.8.5) and the visionOS build
 ## Setup at a glance
 
 1. Get dependencies: `cargo fetch`
-2. Create config: copy `config.example.toml`, then adjust `auth.token` and `[visionos]`
-3. Validate: `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`
-4. Launch via MCP client: run `cargo run --quiet -- --transport=stdio` as a child process and align `MCP_SHARED_TOKEN`
-5. Call tools: `mcp call validate_sandbox_policy ...` / `mcp call build_visionos_app ...` etc.
+2. Register MCP: run `seiro-mcp config mcp`, then paste the TOML into `~/.codex/config.toml`
+3. Create project config: run `seiro-mcp config project` from the project root to create `seiro-mcp.toml`
+4. Validate: `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`
+5. Launch via an MCP client and call tools: `mcp call validate_sandbox_policy ...` / `mcp call build_visionos_app ...` etc.
 
 See the linked pages for detailed steps and troubleshooting. GitHub Pages uses relative links under `docs/`.

@@ -22,6 +22,7 @@ tests/fixtures/visionos/workspace/VisionApp/target/
 
 # exclude
 config.toml
+seiro-mcp.toml
 .codex/
 .rustup-home/
 .specify/

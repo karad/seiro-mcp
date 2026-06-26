@@ -1,10 +1,9 @@
 //! CLI argument definitions and `LaunchProfile` construction.
-use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand};
 
-use super::{build_launch_args, resolve_config_path, resolve_token, LaunchProfile, TransportMode};
+use super::{build_launch_args, resolve_config_path, LaunchProfile};
 
 /// Parsed command intent from CLI.
 #[derive(Debug, Clone)]
@@ -16,9 +15,41 @@ pub enum ParsedCommand {
 /// Top-level optional CLI commands.
 #[derive(Debug, Clone, Subcommand)]
 pub enum CliCommand {
+    /// Generate Seiro MCP configuration snippets and project config files.
+    #[command(about = "Generate Seiro MCP configuration")]
+    Config(ConfigArgs),
     /// Manage bundled Codex skills (install/remove).
     #[command(about = "Manage bundled Codex skills (install/remove)")]
     Skill(SkillArgs),
+}
+
+/// `config` command container.
+#[derive(Debug, Clone, Args)]
+#[command(
+    about = "Generate Seiro MCP configuration",
+    long_about = "Generate Seiro MCP configuration.\n\nSubcommands:\n  mcp      Print a Codex MCP registration snippet.\n  project  Create a project-local seiro-mcp.toml.",
+    after_help = "Hint: use `seiro-mcp config mcp` for Codex config and `seiro-mcp config project` in a project root."
+)]
+pub struct ConfigArgs {
+    #[command(subcommand)]
+    pub command: ConfigCommand,
+}
+
+/// Configuration helper subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum ConfigCommand {
+    /// Print TOML to paste into Codex config.
+    Mcp,
+    /// Create a project-local seiro-mcp.toml.
+    Project(ConfigProjectArgs),
+}
+
+/// Arguments for `config project`.
+#[derive(Debug, Clone, Args)]
+pub struct ConfigProjectArgs {
+    /// Overwrite an existing seiro-mcp.toml.
+    #[arg(long, default_value_t = false)]
+    pub force: bool,
 }
 
 /// `skill` command container.
@@ -26,7 +57,7 @@ pub enum CliCommand {
 #[command(
     about = "Manage bundled Codex skills",
     long_about = "Manage bundled Codex skills.\n\nSubcommands:\n  install  Place bundled skills into Codex skills directory.\n  remove   Delete bundled skills from Codex skills directory.",
-    after_help = "Hint: use `seiro-mcp skill install --dry-run <SKILL_NAME>` to preview planned file changes without modifying files."
+    after_help = "Hint: use `seiro-mcp skill install --dry-run` to preview installing the default bundled skill without modifying files."
 )]
 pub struct SkillArgs {
     #[command(subcommand)]
@@ -45,8 +76,8 @@ pub enum SkillCommand {
 /// Arguments for `skill install`.
 #[derive(Debug, Clone, Args)]
 pub struct SkillInstallArgs {
-    /// Skill name (must start with `seiro-mcp-`).
-    pub skill_name: String,
+    /// Skill name (defaults to `seiro-mcp-visionos-build-operator`; must start with `seiro-mcp-` when provided).
+    pub skill_name: Option<String>,
     /// Overwrite existing files.
     #[arg(long, default_value_t = false)]
     pub force: bool,
@@ -71,15 +102,9 @@ pub struct SkillRemoveArgs {
     long_about = None
 )]
 pub struct LaunchProfileArgs {
-    /// Select stdio (default) or tcp.
-    #[arg(long, value_enum, default_value_t = TransportMode::Stdio)]
-    pub transport: TransportMode,
-    /// Path to config.toml (overrides MCP_CONFIG_PATH).
+    /// Path to seiro-mcp.toml (overrides MCP_CONFIG_PATH).
     #[arg(long = "config")]
-    pub config_override: Option<PathBuf>,
-    /// Explicit token override via CLI.
-    #[arg(long = "token")]
-    pub token_override: Option<String>,
+    pub config_override: Option<std::path::PathBuf>,
     /// Optional CLI command mode.
     #[command(subcommand)]
     pub command: Option<CliCommand>,
@@ -89,15 +114,11 @@ impl LaunchProfileArgs {
     /// Build a `LaunchProfile` from CLI args and environment variables.
     pub fn build(self) -> Result<LaunchProfile> {
         let config_path = resolve_config_path(self.config_override)?;
-        let (shared_token, token_source) = resolve_token(self.token_override);
 
-        let launch_args = build_launch_args(self.transport, &config_path);
+        let launch_args = build_launch_args(&config_path);
 
         Ok(LaunchProfile {
             config_path,
-            transport: self.transport,
-            shared_token,
-            token_source,
             launch_args,
         })
     }
@@ -119,10 +140,13 @@ fn validate_command(command: &CliCommand) -> Result<()> {
     use crate::cli::validate_skill_name_prefix;
 
     match command {
+        CliCommand::Config(_) => {}
         CliCommand::Skill(skill) => match &skill.command {
             SkillCommand::Install(args) => {
-                if !validate_skill_name_prefix(&args.skill_name) {
-                    return Err(anyhow!("invalid skill name: must start with `seiro-mcp-`"));
+                if let Some(skill_name) = &args.skill_name {
+                    if !validate_skill_name_prefix(skill_name) {
+                        return Err(anyhow!("invalid skill name: must start with `seiro-mcp-`"));
+                    }
                 }
             }
             SkillCommand::Remove(args) => {

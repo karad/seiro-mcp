@@ -15,7 +15,7 @@ pub fn log_env_source(path: &std::path::Path, from_env: bool) {
             path = %path.display(),
             env = CONFIG_ENV_KEY,
             default = DEFAULT_CONFIG_PATH,
-            "MCP_CONFIG_PATH not set; using default config.toml"
+            "MCP_CONFIG_PATH not set; using default seiro-mcp.toml"
         );
     }
 }
@@ -24,8 +24,6 @@ pub fn log_loaded(config: &ServerConfig) {
     info!(
         target: "rmcp_sample::config",
         path = %config.source_path.display(),
-        host = %config.server.host,
-        port = config.server.port,
         visionos_allowed_paths = %config.visionos.allowed_paths.len(),
         visionos_allowed_schemes = %config.visionos.allowed_schemes.len(),
         max_build_minutes = config.visionos.max_build_minutes,

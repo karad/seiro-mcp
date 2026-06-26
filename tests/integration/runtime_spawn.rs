@@ -10,7 +10,7 @@ use rmcp::{model::ClientInfo, serve_client};
 use tempfile::tempdir;
 use tokio::time::timeout;
 
-use crate::common::{fixture, spawn_server_process, BINARY_PATH, VALID_TOKEN};
+use crate::common::{fixture, spawn_server_process, BINARY_PATH};
 
 #[tokio::test]
 async fn inspector_style_spawn_lists_tools() -> Result<()> {
@@ -48,9 +48,8 @@ fn direct_execution_requires_mcp_client() {
     let status = StdCommand::new(BINARY_PATH)
         .env(
             "MCP_CONFIG_PATH",
-            fixture("tests/fixtures/config_valid.toml"),
+            fixture("tests/fixtures/seiro_mcp_minimal.toml"),
         )
-        .env("MCP_SHARED_TOKEN", VALID_TOKEN)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdin(Stdio::inherit())
@@ -124,6 +123,108 @@ fn cargo_install_binary_supports_help() {
         stdout.contains("Seiro MCP"),
         "--help output should contain command description, got: {stdout}"
     );
+    assert!(
+        stdout.contains("config"),
+        "--help output should list config subcommand, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("--transport"),
+        "--help output should not expose removed transport flag, got: {stdout}"
+    );
+}
+
+#[test]
+fn config_mcp_prints_paste_ready_toml() {
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("config")
+        .arg("mcp")
+        .output()
+        .expect("config mcp should execute");
+
+    assert!(
+        output.status.success(),
+        "config mcp should succeed, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.starts_with("[mcp_servers.seiro_mcp]\n"));
+    assert!(stdout.contains("command = \""));
+    assert!(!stdout.contains("MCP_CONFIG_PATH"));
+    assert!(!stdout.contains("MCP_SHARED_TOKEN"));
+    assert!(!stdout.contains("working_directory"));
+    assert!(
+        output.stderr.is_empty(),
+        "config mcp should not write stderr on success"
+    );
+}
+
+#[test]
+fn config_project_creates_minimal_seiro_mcp_toml() {
+    let temp = tempdir().expect("can create project temp dir");
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("config")
+        .arg("project")
+        .current_dir(temp.path())
+        .output()
+        .expect("config project should execute");
+
+    assert!(
+        output.status.success(),
+        "config project should succeed, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join("seiro-mcp.toml")).expect("config should exist"),
+        "[visionos]\nallowed_paths = []\nallowed_schemes = []\nxcode_path = \"/Applications/Xcode.app/Contents/Developer\"\n"
+    );
+}
+
+#[test]
+fn config_project_preserves_existing_without_force() {
+    let temp = tempdir().expect("can create project temp dir");
+    let config = temp.path().join("seiro-mcp.toml");
+    fs::write(&config, "existing").expect("can write existing config");
+
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("config")
+        .arg("project")
+        .current_dir(temp.path())
+        .output()
+        .expect("config project should execute");
+
+    assert!(
+        !output.status.success(),
+        "config project should fail when config exists"
+    );
+    assert_eq!(
+        fs::read_to_string(&config).expect("config should still exist"),
+        "existing"
+    );
+}
+
+#[test]
+fn config_project_force_overwrites_existing() {
+    let temp = tempdir().expect("can create project temp dir");
+    let config = temp.path().join("seiro-mcp.toml");
+    fs::write(&config, "existing").expect("can write existing config");
+
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("config")
+        .arg("project")
+        .arg("--force")
+        .current_dir(temp.path())
+        .output()
+        .expect("config project should execute");
+
+    assert!(
+        output.status.success(),
+        "config project --force should succeed, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_ne!(
+        fs::read_to_string(&config).expect("config should exist"),
+        "existing"
+    );
 }
 
 #[test]
@@ -134,7 +235,6 @@ fn skill_install_creates_bundled_skill_file() {
     let output = StdCommand::new(BINARY_PATH)
         .arg("skill")
         .arg("install")
-        .arg("seiro-mcp-visionos-build-operator")
         .env("CODEX_HOME", codex_home)
         .output()
         .expect("skill install should execute");
@@ -197,6 +297,32 @@ fn skill_install_creates_bundled_skill_file() {
         )
         .expect("canonical metadata should exist"),
         "installed metadata should match canonical bundled source"
+    );
+}
+
+#[test]
+fn skill_install_accepts_explicit_bundled_skill_name() {
+    let temp = tempdir().expect("can create temp directory for CODEX_HOME");
+
+    let output = StdCommand::new(BINARY_PATH)
+        .arg("skill")
+        .arg("install")
+        .arg("seiro-mcp-visionos-build-operator")
+        .arg("--dry-run")
+        .env("CODEX_HOME", temp.path())
+        .output()
+        .expect("skill install should execute");
+
+    assert!(
+        output.status.success(),
+        "explicit skill install should still succeed, but status was {:?}, stderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"skill_name\": \"seiro-mcp-visionos-build-operator\""),
+        "payload should contain explicit skill name: {stdout}"
     );
 }
 

@@ -67,8 +67,6 @@ impl JobSpan {
 #[derive(Debug, Serialize)]
 pub struct RuntimeModeTelemetry<'a> {
     pub transport: &'a str,
-    pub host: Option<&'a str>,
-    pub port: Option<u16>,
     pub config_path: &'a str,
     pub pending_jobs: usize,
     pub instructions: &'a str,
@@ -80,8 +78,6 @@ pub fn emit_runtime_mode(telemetry: &RuntimeModeTelemetry<'_>) {
     info!(
         target: "rmcp_sample::runtime",
         transport = telemetry.transport,
-        host = telemetry.host.unwrap_or(""),
-        port = telemetry.port.unwrap_or_default(),
         config_path = telemetry.config_path,
         pending_jobs = telemetry.pending_jobs,
         instructions = telemetry.instructions,

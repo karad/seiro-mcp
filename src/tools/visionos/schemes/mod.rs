@@ -20,7 +20,7 @@ use xcodebuild_list::{run_xcodebuild_list, ProjectKind};
 const PROJECT_PATH_MISSING_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "project_path_missing",
     "project_path is missing",
-    "Provide project_path in request, place a .xcodeproj in current directory, or set visionos.default_project_path in config.toml.",
+    "Provide project_path in request, place a .xcodeproj in current directory, or set visionos.default_project_path in seiro-mcp.toml.",
 );
 const PROJECT_PATH_INVALID_ERROR: ToolErrorDescriptor = ToolErrorDescriptor::new(
     "project_path_invalid",
@@ -243,7 +243,7 @@ fn resolve_project_path_in_dir(
 
     Err(build_error_data(
         &PROJECT_PATH_MISSING_ERROR,
-        json!({ "details": "request.project_path, cwd .xcodeproj, and config.toml visionos.default_project_path are all missing" }),
+        json!({ "details": "request.project_path, cwd .xcodeproj, and seiro-mcp.toml visionos.default_project_path are all missing" }),
         SandboxState::NoViolation,
         false,
     ))

@@ -10,7 +10,7 @@ use rmcp::{
 use serde_json::{json, Value};
 
 use seiro_mcp::server::{
-    config::{AuthSection, ServerConfig, ServerSection, VisionOsConfig},
+    config::{ServerConfig, ServerSection, VisionOsConfig},
     runtime::VisionOsServer,
 };
 
@@ -70,9 +70,6 @@ fn test_server_config(max_build_minutes: u16) -> ServerConfig {
         server: ServerSection {
             host: "127.0.0.1".into(),
             port: 8787,
-        },
-        auth: AuthSection {
-            token: "test-token".into(),
         },
         visionos: VisionOsConfig {
             allowed_paths: vec![workspace],

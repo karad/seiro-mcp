@@ -61,14 +61,21 @@ fn runtime_env_requirements_are_consistent_across_docs() {
             "document should mention MCP_CONFIG_PATH:\n{doc}"
         );
         assert!(
-            doc.contains("MCP_SHARED_TOKEN"),
-            "document should mention MCP_SHARED_TOKEN:\n{doc}"
+            doc.contains("seiro-mcp.toml"),
+            "document should mention seiro-mcp.toml:\n{doc}"
+        );
+    }
+
+    for doc in [&readme, &quickstart, &runbook] {
+        assert!(
+            !doc.contains("MCP_SHARED_TOKEN"),
+            "normal runtime docs should not require MCP_SHARED_TOKEN:\n{doc}"
         );
     }
 }
 
 #[test]
-fn stdio_tcp_transport_examples_are_present() {
+fn stdio_runtime_is_documented_without_transport_switching() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("xtask crate should have repository parent")
@@ -77,14 +84,18 @@ fn stdio_tcp_transport_examples_are_present() {
     let runbook =
         fs::read_to_string(root.join("docs/runbook.md")).expect("runbook should be readable");
 
-    for needle in ["--transport=stdio", "--transport=tcp"] {
+    for doc in [&readme, &runbook] {
         assert!(
-            readme.contains(needle),
-            "README should contain `{needle}`, got:\n{readme}"
+            doc.contains("stdio"),
+            "runtime docs should document stdio startup:\n{doc}"
         );
         assert!(
-            runbook.contains(needle),
-            "docs/runbook.md should contain `{needle}`, got:\n{runbook}"
+            !doc.contains("--transport"),
+            "runtime docs should not document transport switching:\n{doc}"
+        );
+        assert!(
+            !doc.contains("tcp://"),
+            "runtime docs should not document TCP endpoints:\n{doc}"
         );
     }
 }
