@@ -7,36 +7,57 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://karad.github.io/seiro-mcp/)
 
-Seiro MCP is a spatial computing MCP server with visionOS build tools and bundled Codex skill guidance. Today it provides tools to safely run visionOS project builds from Codex CLI and other MCP clients, supporting autonomous AI-assisted coding workflows. Over time, it will expand with additional developer-focused utilities.
+Seiro MCP is a lightweight MCP server focused on visionOS development workflows for AI coding agents. It enables Codex CLI and other MCP clients to safely build, validate, and inspect visionOS projects through a dedicated set of MCP tools.
 
-Detailed start/stop procedures live in [`docs/runbook.md`](docs/runbook.md).
+The goal of Seiro MCP is not to expose every Xcode capability. Instead, it intentionally focuses on the developer workflows that AI coding agents perform most frequently during day-to-day development. Today it provides visionOS build tools together with bundled Codex skill guidance, and over time it will expand with additional developer-focused utilities for spatial computing while remaining focused on development rather than release management.
 
-## Motivation
+## Features
 
-At first, I tried to start autonomous AI-driven coding in my local Codex CLI environment on my Mac, but it didn’t work well in my setup. So I decided to build a simple build tool that provides only the functionality I really needed, and started developing it myself. As I worked on it, I gained deeper insights into autonomous coding and realized new possibilities for this tool. Going forward, I would like to develop various supporting features required for building spatial computing applications as an MCP server.
+- Focused visionOS development workflows for AI coding agents
+- Safe build automation through explicit project constraints
+- AI-friendly MCP interface for build, diagnostics, and artifacts
+- Codex Skill integration for preferred visionOS build operation
+- Predictable local development workflow
+- Written in Rust
 
-## Prerequisites
+## Why Seiro MCP?
+
+General-purpose Xcode automation is powerful, but AI coding agents usually need a focused subset of development operations: validate the environment, build a project, inspect failures, and retrieve artifacts.
+
+Seiro MCP keeps that interface intentionally small. Smaller MCP tool surfaces are easier for agents to reason about, easier for humans to review, and safer to run in local development environments. The project prioritizes predictable developer workflows over release automation, signing orchestration, or full Xcode replacement.
+
+Lightweight does not mean fewer features. It means exposing the right capabilities for AI-assisted development while deliberately leaving release-oriented workflows, signing orchestration, and broad Xcode automation outside the project's scope.
+
+## Quick Start
+
+```bash
+cargo install seiro-mcp --locked
+seiro-mcp config mcp
+seiro-mcp config project
+```
+
+1. Paste the output of `seiro-mcp config mcp` into Codex CLI config (`~/.codex/config.toml`).
+2. Run `seiro-mcp config project` from the target project root.
+3. Edit `seiro-mcp.toml` to allow the target project paths and schemes.
+4. Restart the MCP client and use the visionOS tools.
+
+You are now ready to ask Codex to build your visionOS project with Seiro MCP.
+
+Optional Codex Skill setup:
+
+```bash
+seiro-mcp skill install
+```
+
+## Installation
+
+### Prerequisites
 
 - Rust 1.91.1 (recommend `rustup override set 1.91.1`)
 - Cargo (the `cargo` command must be available)
 - Codex CLI
 - Any MCP client (e.g., official MCP CLI / Inspector)
 - `git`, `bash`/`zsh`
-
-## Directory layout
-
-```text
-src/
-  lib/            # shared logic: errors, telemetry, filesystem helpers
-  server/         # config + RMCP runtime
-  tools/          # visionOS tools
-tests/
-  integration/    # integration tests (separate crate)
-docs/             # configuration, runbook, review checklists
-```
-
-
-## Installation
 
 If DevToolsSecurity is disabled, enable it first:
 
@@ -131,41 +152,9 @@ Alternative GitHub install path for Codex `skill-installer`:
   - `--path .agents/skills/seiro-mcp-visionos-build-operator`
 - This installs only the Codex skill files. You still need the `seiro-mcp` binary plus MCP server configuration (`seiro-mcp config mcp` and `seiro-mcp config project`).
 
-## For Contributors (clone + local build)
+## Usage
 
-If you are developing this repository itself, use the clone flow:
-
-```bash
-git clone git@github.com:karad/seiro-mcp.git
-cd seiro-mcp
-cargo fetch
-cargo run -p xtask -- langscan
-cargo run -p xtask -- docs-langscan
-cargo run -p xtask -- check-docs-links
-cargo run -p xtask -- preflight
-```
-
-If any step fails, fix and rerun.
-- On success, `target/release/seiro-mcp` is produced.
-
-## For Maintainers (release readiness)
-
-Before `cargo publish`, run:
-
-```bash
-cargo check
-cargo test --all -- --nocapture
-cargo fmt -- --check
-cargo clippy -- -D warnings
-cargo build --release
-cargo package --list
-cargo publish --dry-run
-```
-
-`--locked` is recommended for reproducibility, but not mandatory for all environments.
-
-
-## Using from Codex CLI
+### Using from Codex CLI
 
 Add an entry like the following to Codex CLI config (`~/.codex/config.toml`) to call the visionOS tools:
 
@@ -179,20 +168,19 @@ command = "/Users/<your-username>/.cargo/bin/seiro-mcp"
 - By default, Seiro MCP reads `seiro-mcp.toml` from the project current directory.
 - Restart Codex CLI and confirm `mcp list` shows the visionOS tools.
 
+### How It Works
 
-## How It Works
+#### 1. Launch the server via an MCP client
 
-### 1. Launch the server via an MCP client
+- The MCP client must spawn the server as a child process and perform the RMCP handshake over stdio. Running `cargo run` directly without a client will fail immediately.
+- Example with Inspector:
+  ```bash
+  npx @modelcontextprotocol/inspector seiro-mcp
+  ```
+- If you need a non-default config path, pass `MCP_CONFIG_PATH=/absolute/path/to/seiro-mcp.toml`.
+- If you are developing from source, build the binary and launch it through an MCP client.
 
- - The MCP client must spawn the server as a child process and perform the RMCP handshake over stdio. Running `cargo run` directly without a client will fail immediately.
- - Example with Inspector:
-   ```bash
-   npx @modelcontextprotocol/inspector seiro-mcp
-   ```
- - If you need a non-default config path, pass `MCP_CONFIG_PATH=/absolute/path/to/seiro-mcp.toml`.
- - If you are developing from source, build the binary and launch it through an MCP client.
-
-### 2. Validate sandbox policy before building
+#### 2. Validate sandbox policy before building
 
 ```bash
 mcp call validate_sandbox_policy '{
@@ -201,13 +189,14 @@ mcp call validate_sandbox_policy '{
     "xcode_path": "/Applications/Xcode.app/Contents/Developer"
 }'
 ```
+
 - If `status: "ok"`, proceed to `build_visionos_app`.
 - If `status: "error"` or an MCP error, fix based on the code:
-    - `path_not_allowed`: add the project parent directory to `visionos.allowed_paths`.
-    - `sdk_missing`: first inspect `details.diagnostics` (`probe_mode`, `effective_required_sdks`, `detected_sdks_raw`, `detected_sdks_normalized`), then install visionOS SDK from Xcode > Settings > Platforms.
-    - `devtools_security_disabled`: run `DevToolsSecurity -enable`.
-    - `xcode_unlicensed`: run `sudo xcodebuild -license`.
-    - `disk_insufficient`: ensure 20GB+ free space for the build.
+  - `path_not_allowed`: add the project parent directory to `visionos.allowed_paths`.
+  - `sdk_missing`: first inspect `details.diagnostics` (`probe_mode`, `effective_required_sdks`, `detected_sdks_raw`, `detected_sdks_normalized`), then install visionOS SDK from Xcode > Settings > Platforms.
+  - `devtools_security_disabled`: run `DevToolsSecurity -enable`.
+  - `xcode_unlicensed`: run `sudo xcodebuild -license`.
+  - `disk_insufficient`: ensure 20GB+ free space for the build.
 
 Optional preflight before build:
 
@@ -217,8 +206,9 @@ mcp call inspect_xcode_sdks '{
     "xcode_path": "/Applications/Xcode.app/Contents/Developer"
 }'
 ```
+
 - This read-only tool returns `missing_required_sdks` and the same SDK probe context used for sandbox validation.
-- Recommended troubleshooting order: `validate_sandbox_policy` diagnostics → `inspect_xcode_sdks` (optional) → retry validate/build.
+- Recommended troubleshooting order: `validate_sandbox_policy` diagnostics -> `inspect_xcode_sdks` (optional) -> retry validate/build.
 
 Optional scheme discovery before build:
 
@@ -228,12 +218,13 @@ mcp call inspect_xcode_schemes '{
     "xcode_path": "/Applications/Xcode.app/Contents/Developer"
 }'
 ```
+
 - Use this when `project_path` or `scheme` is unknown.
 - If `project_path` is omitted, resolution order is:
   1. `.xcodeproj` discovered in current working directory
   2. `visionos.default_project_path` in `seiro-mcp.toml`
 
-### 3. Start a build with `build_visionos_app`
+#### 3. Start a build with `build_visionos_app`
 
 ```bash
 mcp call build_visionos_app '{
@@ -245,6 +236,7 @@ mcp call build_visionos_app '{
     "env_overrides": {"MOCK_XCODEBUILD_BEHAVIOR": "success"}
 }'
 ```
+
 - `project_path` / `workspace` must be absolute paths within `visionos.allowed_paths`.
 - `scheme` must be listed in `visionos.allowed_schemes`.
 - `configuration` should use lowercase canonical values: `debug` or `release`. For compatibility, `Debug` / `Release` are also accepted.
@@ -262,10 +254,11 @@ mcp call inspect_build_diagnostics '{
     "prefer_typecheck": true
 }'
 ```
+
 - `availability: "available"` returns `primary_location` (`file`, `line`, `column`) from typecheck diagnostics.
 - `availability: "unavailable"` falls back to an `xcodebuild_log` summary with notes.
 
-### 4. Download artifacts with `fetch_build_output`
+#### 4. Download artifacts with `fetch_build_output`
 
 ```bash
 mcp call fetch_build_output '{
@@ -273,10 +266,11 @@ mcp call fetch_build_output '{
     "include_logs": true
 }'
 ```
+
 - `artifact_zip` points to `target/visionos-builds/<job_id>/artifact.zip`; copy it before `download_ttl_seconds` expires.
 - Set `include_logs: false` to omit `log_excerpt` and reduce noise on the client side.
 
-## Skills Support (Seiro MCP Preferred for visionOS/Xcode)
+### Skills Support
 
 Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 
@@ -286,53 +280,50 @@ Seiro MCP keeps the MCP-only flow unchanged. You can choose either mode:
 - When discovering a project locally, remember that `.xcodeproj` and `.xcworkspace` are directory packages. Do not rely on file-only searches such as `rg --files` to decide they are absent.
 
 Skill path in this repository:
+
 - `.agents/skills/seiro-mcp-visionos-build-operator/SKILL.md`
 
 Install from CLI:
+
 ```bash
 seiro-mcp skill install --dry-run
 seiro-mcp skill install
 ```
 
 Install from GitHub with Codex `skill-installer`:
+
 - `--repo karad/seiro-mcp`
 - `--path .agents/skills/seiro-mcp-visionos-build-operator`
 
 Prompt examples:
+
 - `Use seiro-mcp-visionos-build-operator for this visionOS build task.`
 - `Please run this using the seiro-mcp-visionos-build-operator skill.`
 - `Use Seiro MCP for this Xcode project instead of direct xcodebuild.`
 
 Important:
+
 - Skills provide orchestration guidance.
 - MCP provides execution capability.
 - In skill-assisted mode, the actual execution remains MCP tool calls with unchanged contracts.
 - Installing the skill from GitHub or `seiro-mcp skill install` does not install the Seiro MCP server binary or configure the MCP client connection.
 - For Xcode / visionOS project tasks, direct shell `xcodebuild` / `swiftc` should be treated as fallback paths, not the default path.
 
-## Running
+### Running
 
 - The server must be launched as a child process by an MCP client; running `cargo run` directly will fail with `MCP_CLIENT_REQUIRED` (exit 44).
 - Seiro MCP currently supports local stdio MCP startup. TCP mode is not part of the supported local workflow.
 - See [`docs/runbook.md`](docs/runbook.md) for the full startup recipe.
 
-## Startup mode
+### Startup Mode
 
 - `--config` / `MCP_CONFIG_PATH`: `--config` wins; otherwise `MCP_CONFIG_PATH` -> `./seiro-mcp.toml` (relative paths are resolved to absolute).
 - Token setup is not required for the default local Codex workflow.
 - Exit codes:
   - 44: `MCP_CLIENT_REQUIRED` (stdin/stdout is a TTY; must be launched via MCP client)
-- See the Runbook section “Shutdown procedure and exit codes” for details.
+- See the Runbook section "Shutdown procedure and exit codes" for details.
 
-## Tests and quality gates
-
-- Preferred: `cargo run -p xtask -- preflight` (runs fetch/check/test/fmt/clippy/build in order).
-- Manual: `cargo fetch` → `cargo check` → `cargo test --all` → `cargo fmt -- --check` → `cargo clippy -- -D warnings` → `cargo build --release`.
-- Unit tests in `src/server/config/mod.rs` cover configuration validation (success and error cases).
-- `tests/integration/visionos_build.rs` covers `validate_sandbox_policy`, `build_visionos_app`, `inspect_build_diagnostics`, and `fetch_build_output`, including TTL behavior.
-
-
-## Troubleshooting
+### Troubleshooting
 
 - **Config file not found**: run `seiro-mcp config project` in the project root or set an absolute `MCP_CONFIG_PATH`.
 - **`MCP_CLIENT_REQUIRED`**: occurs when running `cargo run` directly; always launch via an MCP client (Inspector / Codex, etc.).
@@ -342,13 +333,89 @@ Important:
 - **`sdk_missing`**: check `details.diagnostics` first; if `probe_mode` is `env`, verify `VISIONOS_SANDBOX_SDKS`. Then run `inspect_xcode_sdks` and retry after SDK/config fixes.
 - **`build_failed`**: use `job_id` from the structured error and call `inspect_build_diagnostics` to identify file/line before retrying.
 
-## References
+### References
 
 - visionOS quickstart: [`docs/quickstart.md`](docs/quickstart.md)
 - runbook: [`docs/runbook.md`](docs/runbook.md)
 - Configuration details: [`docs/config.md`](docs/config.md)
 
-## Open source
+## Motivation
+
+As AI coding agents become more capable, they also need reliable ways to interact with local development environments. Existing solutions often aim to expose broad Xcode functionality, but many autonomous development tasks require only a small, well-defined subset of those capabilities.
+
+Seiro MCP started from a simple idea: provide only the tools that are actually needed for AI-assisted visionOS development, and make those tools reliable, secure, and easy for AI agents to use. Rather than becoming a full-featured Xcode automation server, Seiro MCP is designed to be a focused development companion that helps AI agents build, validate, inspect diagnostics, and support spatial computing projects.
+
+The long-term vision is to grow Seiro MCP into a collection of carefully designed developer tools that improve AI-assisted development for visionOS and spatial computing while preserving its lightweight philosophy.
+
+## Roadmap
+
+Seiro MCP will continue to grow as a focused development toolkit for AI-assisted spatial computing work. Planned directions include:
+
+- Additional visionOS developer tools
+- Project analysis utilities
+- Additional development workflows for visionOS
+- Swift Package support
+- Better AI agent workflow guidance
+- More spatial computing developer utilities
+
+The roadmap remains aligned with the lightweight philosophy: Seiro MCP should expose the right development tools for AI agents, not become a full-featured Xcode MCP server.
+
+## Contributing
+
+### Directory Layout
+
+```text
+src/
+  lib/            # shared logic: errors, telemetry, filesystem helpers
+  server/         # config + RMCP runtime
+  tools/          # visionOS tools
+tests/
+  integration/    # integration tests (separate crate)
+docs/             # configuration, runbook, review checklists
+```
+
+### For Contributors (clone + local build)
+
+If you are developing this repository itself, use the clone flow:
+
+```bash
+git clone git@github.com:karad/seiro-mcp.git
+cd seiro-mcp
+cargo fetch
+cargo run -p xtask -- langscan
+cargo run -p xtask -- docs-langscan
+cargo run -p xtask -- check-docs-links
+cargo run -p xtask -- preflight
+```
+
+If any step fails, fix and rerun.
+
+- On success, `target/release/seiro-mcp` is produced.
+
+### For Maintainers (release readiness)
+
+Before `cargo publish`, run:
+
+```bash
+cargo check
+cargo test --all -- --nocapture
+cargo fmt -- --check
+cargo clippy -- -D warnings
+cargo build --release
+cargo package --list
+cargo publish --dry-run
+```
+
+`--locked` is recommended for reproducibility, but not mandatory for all environments.
+
+### Tests and Quality Gates
+
+- Preferred: `cargo run -p xtask -- preflight` (runs fetch/check/test/fmt/clippy/build in order).
+- Manual: `cargo fetch` -> `cargo check` -> `cargo test --all` -> `cargo fmt -- --check` -> `cargo clippy -- -D warnings` -> `cargo build --release`.
+- Unit tests in `src/server/config/mod.rs` cover configuration validation (success and error cases).
+- `tests/integration/visionos_build.rs` covers `validate_sandbox_policy`, `build_visionos_app`, `inspect_build_diagnostics`, and `fetch_build_output`, including TTL behavior.
+
+### Open Source
 
 - License: [`LICENSE`](LICENSE)
 - Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
