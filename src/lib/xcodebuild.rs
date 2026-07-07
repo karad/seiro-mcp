@@ -34,6 +34,9 @@ pub fn build_visionos_xcodebuild_command(
     command.env("DEVELOPER_DIR", config.xcode_path);
     command.env("VISIONOS_BUILD_ARTIFACT_DIR", config.staging_dir);
     for (key, value) in request.env_overrides {
+        if key == "DEVELOPER_DIR" {
+            continue;
+        }
         command.env(key, value);
     }
 
@@ -62,4 +65,64 @@ pub fn build_visionos_xcodebuild_command(
     }
 
     command
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, path::PathBuf};
+
+    use super::*;
+
+    #[test]
+    fn env_overrides_cannot_replace_configured_developer_dir() {
+        let xcodebuild_path = PathBuf::from("/usr/bin/xcodebuild");
+        let xcode_path = PathBuf::from("/Applications/Xcode.app/Contents/Developer");
+        let staging_dir = PathBuf::from("/tmp/staging");
+        let project_path = PathBuf::from("/tmp/project");
+        let extra_args = Vec::new();
+        let env_overrides = BTreeMap::from([
+            (
+                "DEVELOPER_DIR".to_string(),
+                "/tmp/untrusted/Contents/Developer".to_string(),
+            ),
+            ("CI".to_string(), "true".to_string()),
+        ]);
+
+        let command = build_visionos_xcodebuild_command(
+            VisionOsXcodebuildCommandConfig {
+                xcodebuild_path: &xcodebuild_path,
+                xcode_path: &xcode_path,
+                staging_dir: &staging_dir,
+            },
+            VisionOsXcodebuildRequest {
+                project_path: &project_path,
+                workspace: None,
+                scheme: "VisionApp",
+                configuration: "Debug",
+                destination: "platform=visionOS Simulator,name=Apple Vision Pro",
+                clean: false,
+                extra_args: &extra_args,
+                env_overrides: &env_overrides,
+            },
+        );
+
+        let envs: BTreeMap<_, _> = command
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| {
+                value.map(|value| (key.to_os_string(), value.to_os_string()))
+            })
+            .collect();
+
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("DEVELOPER_DIR"))
+                .map(|value| value.as_os_str()),
+            Some(xcode_path.as_os_str())
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("CI"))
+                .map(|value| value.as_os_str()),
+            Some(std::ffi::OsStr::new("true"))
+        );
+    }
 }

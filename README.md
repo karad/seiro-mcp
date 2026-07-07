@@ -74,14 +74,16 @@ $ sudo DevToolsSecurity -enable
 cargo install seiro-mcp --locked
 ```
 
-#### Upgrade to v0.5.0
+#### Upgrade to v0.5.1
 
-If you already installed an earlier version, upgrade to `v0.5.0` with:
+If you already installed an earlier version, upgrade to `v0.5.1` with:
 
 ```bash
-cargo install seiro-mcp --locked --force --version 0.5.0
+cargo install seiro-mcp --locked --force --version 0.5.1
 seiro-mcp --version
 ```
+
+Release history and upgrade notes are published in [GitHub Releases](https://github.com/karad/seiro-mcp/releases).
 
 To refresh bundled skill guidance after upgrading:
 

@@ -39,6 +39,8 @@ This repository does not yet provide an automated release pipeline. Use this doc
 4. Validate docs consistency:
    - README / `docs/quickstart.md` / `docs/runbook.md` / `docs/config.md`
    - `docs/compatibility.md` reflects any contract decision
+   - README points to GitHub Releases as the canonical release history
+   - README review follows `docs/readme_review_checklist.md`
 5. Validate external display metadata:
    - `.agents/skills/seiro-mcp-visionos-build-operator/agents/openai.yaml` contains `display_name`, `short_description`, `icon_large`, and `default_prompt`
    - `.agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-large.png` and `.agents/skills/seiro-mcp-visionos-build-operator/assets/seiro-mcp-logo-small.svg` are present
@@ -48,6 +50,8 @@ This repository does not yet provide an automated release pipeline. Use this doc
 ## Publishing (manual)
 
 - Ensure `Cargo.toml` version, git tag, and release note version are identical.
+- Treat [GitHub Releases](https://github.com/karad/seiro-mcp/releases) as the canonical release history.
+- Do not require or update a repository `CHANGELOG.md`.
 - Create an annotated git tag (prefer signed tags when available):
   ```bash
   git tag -a vX.Y.Z -m "vX.Y.Z"
@@ -58,6 +62,7 @@ This repository does not yet provide an automated release pipeline. Use this doc
   cargo publish
   ```
 - Create a GitHub Release for the same tag and include:
+  - Release notes for the published tag
   - Change summary
   - Install command: `cargo install seiro-mcp --locked`
   - Compatibility constraints:
