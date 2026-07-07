@@ -31,8 +31,7 @@ This document defines the responsibility boundaries and dependency direction for
   - config keys and semantics
   - tool IDs (`build_visionos_app`, `validate_sandbox_policy`, `fetch_build_output`)
   - error codes and remediation messages
-  - contracts JSON under `contracts/` and `specs/*/contracts`
+  - public contract snapshots and fixtures under `tests/fixtures/`
 - Enforce with:
   - `tests/integration/refactor_contracts.rs` + `tests/fixtures/contracts_sha256.txt`
   - `tests/integration/refactor_behaviour.rs` + `tests/fixtures/refactor/*.json`
-

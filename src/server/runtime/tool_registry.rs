@@ -67,18 +67,13 @@ impl VisionOsServer {
             VisionOsBuildError::CommandFailed { message, .. } => message.clone(),
             _ => err.to_string(),
         };
-        let effective_xcode_path = request
-            .env_overrides
-            .get("DEVELOPER_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.config.visionos.xcode_path.clone());
         let failure_context = Some(BuildFailureContext {
             project_path: request.project_path.clone(),
             workspace: request.workspace.clone(),
             scheme: request.scheme.clone(),
             configuration: request.configuration.as_str().to_string(),
             destination: request.destination.clone(),
-            xcode_path: effective_xcode_path,
+            xcode_path: self.config.visionos.xcode_path.clone(),
             env_overrides: request.env_overrides.clone(),
             extra_args: request.extra_args.clone(),
         });
@@ -224,5 +219,91 @@ impl ServerHandler for VisionOsServer {
             instructions: Some((*self.instructions).clone()),
             ..ServerInfo::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, path::PathBuf};
+
+    use uuid::Uuid;
+
+    use crate::{
+        lib::errors::VisionOsBuildError,
+        server::config::{
+            ServerConfig, ServerSection, VisionOsConfig, DEFAULT_VISIONOS_DESTINATION,
+        },
+        tools::visionos::{build::BuildConfiguration, VisionOsBuildRequest},
+    };
+
+    use super::VisionOsServer;
+
+    fn sample_server() -> VisionOsServer {
+        VisionOsServer::new(
+            ServerConfig {
+                server: ServerSection {
+                    host: "127.0.0.1".into(),
+                    port: 8787,
+                },
+                visionos: VisionOsConfig {
+                    allowed_paths: vec![],
+                    allowed_schemes: vec![],
+                    default_project_path: None,
+                    default_destination: DEFAULT_VISIONOS_DESTINATION.into(),
+                    required_sdks: vec!["visionOS".into(), "visionOS Simulator".into()],
+                    xcode_path: PathBuf::from("/Applications/Xcode.app/Contents/Developer"),
+                    xcodebuild_path: PathBuf::from("/usr/bin/xcodebuild"),
+                    max_build_minutes: 20,
+                    artifact_ttl_secs: 600,
+                    cleanup_schedule_secs: 60,
+                },
+                source_path: PathBuf::from("test-config.toml"),
+            },
+            "test instructions".into(),
+        )
+    }
+
+    fn sample_request() -> VisionOsBuildRequest {
+        VisionOsBuildRequest {
+            project_path: PathBuf::from("/tmp/project"),
+            workspace: None,
+            scheme: "VisionApp".into(),
+            configuration: BuildConfiguration::Debug,
+            destination: DEFAULT_VISIONOS_DESTINATION.into(),
+            clean: false,
+            extra_args: Vec::new(),
+            env_overrides: BTreeMap::from([(
+                "DEVELOPER_DIR".to_string(),
+                "/tmp/untrusted/Contents/Developer".to_string(),
+            )]),
+        }
+    }
+
+    #[tokio::test]
+    async fn failure_context_uses_configured_xcode_path() {
+        let server = sample_server();
+        let job_id = Uuid::new_v4();
+        let error = VisionOsBuildError::CommandFailed {
+            exit_code: Some(1),
+            message: "xcodebuild failed".into(),
+        };
+
+        server
+            .record_build_failure(job_id, &error, &sample_request())
+            .await;
+
+        let record = server
+            .artifact_store
+            .fetch_record(&job_id)
+            .await
+            .expect("failure record should exist");
+        let context = record
+            .failure_context
+            .expect("failure context should be recorded");
+
+        assert_eq!(
+            context.xcode_path,
+            PathBuf::from("/Applications/Xcode.app/Contents/Developer")
+        );
     }
 }

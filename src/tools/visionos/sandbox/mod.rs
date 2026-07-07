@@ -463,13 +463,27 @@ fn sdk_is_present(sdks: &[String], required: &str) -> bool {
             return false;
         }
         let sdk_lower = sdk_trimmed.to_lowercase();
-        sdk_lower == required_lower || sdk_lower.starts_with(&required_lower)
+        sdk_lower == required_lower || sdk_identifier_prefix_matches(&sdk_lower, &required_lower)
     })
+}
+
+fn sdk_identifier_prefix_matches(detected: &str, required: &str) -> bool {
+    if required.is_empty() || !required.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+    let Some(suffix) = detected.strip_prefix(required) else {
+        return false;
+    };
+    suffix
+        .chars()
+        .next()
+        .map(|ch| ch.is_ascii_digit() || ch == '.')
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
     use rmcp::model::ErrorData;
     use serde_json::{Map, Value};
@@ -599,6 +613,93 @@ mod tests {
         assert!(diagnostics
             .detected_sdks_normalized
             .contains(&"xros26.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn sandbox_policy_does_not_satisfy_device_sdk_with_simulator_sdk() {
+        let temp = tempdir().expect("can create temp directory");
+        let request = SandboxPolicyRequest {
+            project_path: allowed_project_path(),
+            required_sdks: vec!["visionOS".into()],
+            xcode_path: Some(temp.path().to_path_buf()),
+        };
+        let probe = FakeProbe {
+            sdks: vec!["visionOS Simulator".into()],
+            devtools_enabled: true,
+            license_ok: true,
+            disk_bytes: MIN_DISK_BYTES + 1,
+        };
+
+        let failure = validate_sandbox_policy_with_probe(request, &sample_config(), &probe)
+            .await
+            .expect_err("device SDK should not be satisfied by simulator SDK");
+
+        match failure.error {
+            SandboxPolicyError::MissingSdk { name } => assert_eq!(name, "visionOS"),
+            other => panic!("Unexpected error: {other:?}", other = other),
+        }
+    }
+
+    #[tokio::test]
+    async fn inspect_xcode_sdks_reports_device_sdk_missing_when_only_simulator_exists() {
+        let temp = tempdir().expect("can create temp directory");
+        let request = InspectXcodeSdksRequest {
+            required_sdks: vec!["visionOS".into()],
+            xcode_path: Some(temp.path().to_path_buf()),
+        };
+        let probe = FakeProbe {
+            sdks: vec!["visionOS Simulator".into()],
+            devtools_enabled: true,
+            license_ok: true,
+            disk_bytes: MIN_DISK_BYTES + 1,
+        };
+
+        let response =
+            inspect_xcode_sdks_with_probe_mode(request, &sample_config(), &probe, "system")
+                .await
+                .expect("SDK inspection should return a response");
+
+        assert_eq!(response.status, SandboxStatus::Error);
+        assert_eq!(response.missing_required_sdks, vec!["visionOS"]);
+    }
+
+    #[test]
+    fn sdk_identifier_prefix_match_preserves_versioned_identifiers() {
+        assert!(sdk_is_present(&["xros26.0".into()], "xros"));
+        assert!(sdk_is_present(&["macosx15.0".into()], "macosx"));
+        assert!(!sdk_is_present(&["visionOS Simulator".into()], "visionOS"));
+    }
+
+    #[tokio::test]
+    async fn sandbox_policy_rejects_parent_traversal_escape() {
+        let temp = tempdir().expect("can create temp directory");
+        let allowed = temp.path().join("allowed");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&allowed).expect("can create allowed directory");
+        fs::create_dir_all(&outside).expect("can create outside directory");
+
+        let mut config = sample_config();
+        config.allowed_paths = vec![allowed.clone()];
+        let request = SandboxPolicyRequest {
+            project_path: allowed.join("..").join("outside"),
+            required_sdks: vec!["visionOS".into()],
+            xcode_path: Some(temp.path().to_path_buf()),
+        };
+        let probe = FakeProbe {
+            sdks: vec!["visionOS".into()],
+            devtools_enabled: true,
+            license_ok: true,
+            disk_bytes: MIN_DISK_BYTES + 1,
+        };
+
+        let failure = validate_sandbox_policy_with_probe(request, &config, &probe)
+            .await
+            .expect_err("path escaping allowed base should be rejected");
+
+        assert!(matches!(
+            failure.error,
+            SandboxPolicyError::PathNotAllowed { .. }
+        ));
     }
 
     #[tokio::test]

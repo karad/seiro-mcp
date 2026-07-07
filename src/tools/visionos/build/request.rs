@@ -21,12 +21,7 @@ pub const ALLOWED_EXTRA_ARGS: &[&str] = &[
 ];
 
 /// Environment variables allowed in `env_overrides`.
-pub const ALLOWED_ENV_OVERRIDES: &[&str] = &[
-    "DEVELOPER_DIR",
-    "NSUnbufferedIO",
-    "CI",
-    "MOCK_XCODEBUILD_BEHAVIOR",
-];
+pub const ALLOWED_ENV_OVERRIDES: &[&str] = &["NSUnbufferedIO", "CI", "MOCK_XCODEBUILD_BEHAVIOR"];
 
 /// Build configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
@@ -205,10 +200,11 @@ pub enum BuildRequestValidationError {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{collections::BTreeMap, fs, path::PathBuf};
 
     use crate::server::config::VisionOsConfig;
     use serde_json::json;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -354,5 +350,79 @@ mod tests {
         request
             .validate(&config)
             .expect("allowlist checks should be skipped when lists are empty");
+    }
+
+    #[test]
+    fn project_path_parent_traversal_escape_is_rejected() {
+        let temp = tempdir().expect("can create temp directory");
+        let allowed = temp.path().join("allowed");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&allowed).expect("can create allowed directory");
+        fs::create_dir_all(&outside).expect("can create outside directory");
+
+        let mut config = sample_config();
+        config.allowed_paths = vec![allowed.clone()];
+
+        let mut request = base_request();
+        request.project_path = allowed.join("..").join("outside");
+
+        let error = request
+            .validate(&config)
+            .expect_err("path escaping allowed base should be rejected");
+
+        assert_eq!(
+            error,
+            BuildRequestValidationError::ProjectPathNotAllowed {
+                path: request.project_path
+            }
+        );
+    }
+
+    #[test]
+    fn workspace_parent_traversal_escape_is_rejected() {
+        let temp = tempdir().expect("can create temp directory");
+        let allowed = temp.path().join("allowed");
+        let project = allowed.join("project");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&project).expect("can create project directory");
+        fs::create_dir_all(&outside).expect("can create outside directory");
+
+        let mut config = sample_config();
+        config.allowed_paths = vec![allowed.clone()];
+
+        let mut request = base_request();
+        request.project_path = project;
+        request.workspace = Some(allowed.join("..").join("outside"));
+
+        let error = request
+            .validate(&config)
+            .expect_err("workspace escaping allowed base should be rejected");
+
+        assert_eq!(
+            error,
+            BuildRequestValidationError::WorkspaceNotAllowed {
+                path: request.workspace.expect("workspace should be present")
+            }
+        );
+    }
+
+    #[test]
+    fn developer_dir_env_override_is_rejected() {
+        let mut request = base_request();
+        request.env_overrides = BTreeMap::from([(
+            "DEVELOPER_DIR".to_string(),
+            "/tmp/untrusted/Contents/Developer".to_string(),
+        )]);
+
+        let error = request
+            .validate(&sample_config())
+            .expect_err("DEVELOPER_DIR override should be rejected");
+
+        assert_eq!(
+            error,
+            BuildRequestValidationError::EnvOverrideNotAllowed {
+                key: "DEVELOPER_DIR".into()
+            }
+        );
     }
 }
